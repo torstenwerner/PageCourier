@@ -136,7 +136,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
 		'UPLOAD_MAX_BYTES',
 		env.UPLOAD_MAX_BYTES ?? String(DEFAULT_UPLOAD_MAX_BYTES),
 		1,
-		Number.MAX_SAFE_INTEGER
+		Number.MAX_SAFE_INTEGER - 65_536
 	);
 
 	const logLevel = parseLogLevel(env.LOG_LEVEL ?? 'info');

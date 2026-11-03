@@ -1,9 +1,9 @@
 # PageCourier
 
 PageCourier is a web application for sharing rendered Markdown through a
-unique link. The server supports immutable document uploads and downloads using
-private S3-compatible storage. The landing-page uploader and full Markdown
-reader interface are deferred; document pages currently display escaped source.
+unique link. The server stores immutable uploads in private S3-compatible
+storage and serves readable document pages, canonical share links, and exact
+original downloads.
 
 ## Requirements
 
@@ -70,13 +70,14 @@ npm run check             # Svelte and TypeScript checks
 npm run lint              # Prettier and ESLint
 npm run test:unit         # Vitest unit tests
 npm run test:e2e:install  # Install Playwright Chromium once
-npm run test:e2e          # Production Node-adapter smoke test
+npm run test:e2e          # Node-adapter browser journeys with local test storage
 npm test                  # Unit and browser tests
 npm run build             # Production build
 ```
 
-The landing-page browser smoke test does not require S3. Unit tests include
-deterministic multipart, collision, storage-failure and route coverage.
+The browser suite uses an isolated local S3-protocol test server; no external
+storage service or credentials are required. Unit tests include deterministic
+multipart, collision, storage-failure, rendering-safety and route coverage.
 
 ## Document API
 
@@ -103,6 +104,25 @@ safe attachment filenames. Malformed, missing and operator-deleted IDs return
 Document/download responses use private, no-store caching, no indexing and
 no-referrer headers. Anyone with a document URL can retrieve its content; do
 not upload secrets. There are no application edit/delete or listing endpoints.
+
+### Markdown rendering and sharing
+
+Document pages render CommonMark and GitHub-flavored Markdown, including
+tables, display-only task lists, strikethrough, links, lists, blockquotes, and
+fenced code blocks with syntax highlighting for recognized languages. Unknown
+code languages remain escaped plain code. Heading links use same-document
+anchors. Raw HTML is disabled and the generated markup is sanitized.
+
+External links support HTTP and HTTPS. Remote images load directly from their
+HTTPS hosts; those hosts can observe the reader's network request and IP
+address. Relative file links, local image paths, attachments, and bundled
+assets are unsupported and are not routed through PageCourier. Mathematical
+notation is not rendered as math. Mermaid diagrams are deferred to a follow-up
+implementation and currently render as ordinary fenced code.
+
+Document URLs are share links, not access controls. Anyone who receives or is
+forwarded a link can read and download the immutable document. Documents remain
+available indefinitely unless an operator removes their storage object.
 
 ### Upload and transport limits
 

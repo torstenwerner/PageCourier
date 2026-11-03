@@ -17,17 +17,13 @@ export default defineConfig({
 		}
 	],
 	webServer: {
-		command: 'npm run build && npm start',
+		command: 'npm run build && node scripts/e2e-server.mjs',
 		url: baseURL,
 		timeout: 120_000,
 		reuseExistingServer: !process.env.CI,
 		env: {
-			NODE_ENV: 'production',
-			HOST: '127.0.0.1',
 			PORT: '4173',
-			PUBLIC_ORIGIN: baseURL,
-			S3_BUCKET: 'pagecourier-test',
-			AWS_REGION: 'us-east-1'
+			PUBLIC_ORIGIN: baseURL
 		}
 	}
 });

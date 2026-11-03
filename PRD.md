@@ -110,6 +110,12 @@ ready for unrestricted public anonymous uploads.
 - Display a readable document page with a title derived from the first non-empty
   Markdown heading, falling back to the uploaded filename. Treat the title as
   text, not executable markup.
+- Include server-rendered Open Graph metadata on each document page for link
+  previews: `og:title` using the document title, `og:description` using a
+  concise plain-text excerpt of the Markdown content, `og:url` using the
+  canonical document URL, and `og:type` set to `article`. Escape metadata
+  values and derive the description without executable markup. An Open Graph
+  preview image is not required for the MVP.
 - Support CommonMark and GitHub-flavored Markdown: tables, task lists,
   strikethrough, links, lists, blockquotes, and fenced code blocks.
 - Task-list checkboxes are display-only; interacting with a page must not modify
@@ -368,6 +374,7 @@ not only a development server or mocked storage.
 | AC-16 | Compose provisions usable local storage; published release image manifests contain both required CPU architectures. |
 | AC-17 | A deliberately simulated ID collision cannot overwrite an existing object; a new identifier is generated instead. |
 | AC-18 | Document/download responses use required caching, indexing, referrer, and security headers; application logs do not disclose document content or full share URLs. |
+| AC-19 | Each document page's server-rendered HTML includes correctly escaped Open Graph title, plain-text description, canonical URL, and `article` type metadata; no preview image is required. |
 
 Use TypeScript checks, linting, and unit/integration tests for validation,
 identifier generation, storage behavior, rendering safety, errors, and

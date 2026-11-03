@@ -75,7 +75,7 @@ The palette pairs a deep ink-navy foundation with cool mineral neutrals and a co
 
 ## Typography
 
-**Display Font:** Helvetica Neue, with Helvetica, Segoe UI, Arial, and sans-serif fallbacks  
+**Display Font:** Helvetica Neue, with Helvetica, Segoe UI, Arial, and sans-serif fallbacks
 **Body Font:** The same sans-serif stack, followed by platform emoji fallbacks
 
 **Character:** Clean, compact, and direct. Weight and tight tracking give the headline presence; supporting copy and small tracked labels keep the schematic readable and orderly.

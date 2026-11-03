@@ -16,6 +16,9 @@ colors:
   link-caption: '#f1f3ea'
   journey-orbit: 'rgb(247 248 243 / 18%)'
   status-error: '#8d2923'
+  code-keyword: '#b6d7f0'
+  code-number: '#f3c98b'
+  code-comment: '#c1d0d2'
 typography:
   display:
     fontFamily: "'Helvetica Neue', Helvetica, 'Segoe UI', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji'"
@@ -30,6 +33,29 @@ typography:
     fontSize: '0.72rem'
     fontWeight: 700
     letterSpacing: '0.12em'
+  code:
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  scale:
+    micro: '0.62rem'
+    diagram-label: '0.68rem'
+    diagram-filetype: '0.7rem'
+    label: '0.72rem'
+    marker: '0.8rem'
+    caption: '0.85rem'
+    small: '0.875rem'
+    action: '0.9rem'
+    status: '0.95rem'
+    body: '1rem'
+    brand: '1.05rem'
+    lead: '1.15rem'
+    heading-3: '1.25rem'
+    section-heading: '1.4rem'
+    heading-2: '1.55rem'
+    fallback-heading: '1.75rem'
+    reader-heading: '2rem'
+    display-mobile: '3rem'
+    display-tablet: '3.5rem'
+    display: '4.5rem'
 ---
 
 # Design System: PageCourier
@@ -72,6 +98,7 @@ The palette pairs a deep ink-navy foundation with cool mineral neutrals and a co
 - **Pale Caption** (`{colors.link-caption}`): Link caption against the dark schematic.
 - **Faint Orbit** (`{colors.journey-orbit}`): Low-contrast partial circle at the diagram edge.
 - **Status Error** (`{colors.status-error}`): Error message text and its outlined status mark.
+- **Code Syntax** (`{colors.code-keyword}`, `{colors.code-number}`, and `{colors.code-comment}`): Distinct readable accents within fenced code blocks on the ink background.
 
 ## Typography
 
@@ -86,6 +113,7 @@ The palette pairs a deep ink-navy foundation with cool mineral neutrals and a co
 - **Body** (shared sans-serif stack): Supporting copy uses a relaxed 1.6 line-height; the lead is 1.15rem on wider screens and 1.05rem on narrow screens.
 - **Label** (weight 700, 0.72rem, letter-spacing 0.12em): Uppercase route labels; smaller step labels use the same tracked, bold treatment.
 - **Brand** (weight 750, 1.05rem, letter-spacing -0.025em): Compact wordmark alongside its square document icon.
+- **Reader and controls**: Use the declared `typography.scale` for document headings, supporting copy, statuses, and actions. Fenced code uses the system monospace stack in `typography.code`; syntax accents are reserved for code tokens.
 
 ## Layout
 

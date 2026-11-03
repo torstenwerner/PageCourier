@@ -1,10 +1,17 @@
 <!--
-THESIS: PageCourier carries Markdown into a shareable page, without the category-default upload form before upload exists.
-OWN-WORLD: Mineral green, ink navy, and signal lime; precise sans typography and a flat, route-marked page diagram.
-STORY: A small-team member understands the product's one-file-to-one-link purpose without being promised a working upload flow.
-FIRST VIEWPORT: Brand at top, one large left-aligned headline, short explanation, and a right-side file-to-link schematic; the GitHub project link closes the copy.
-FORM: Operate mode, scoped foundation shell; no concept-seed roll because the brief tightly bounds this static first screen.
+THESIS: Make the one-file-to-one-link promise actionable without replacing PageCourier's editorial introduction.
+OWN-WORLD: Mineral green, ink navy, and signal lime; precise sans typography, fine rules, and the flat route diagram.
+STORY: A small-team member chooses or drops one Markdown file, understands the sharing and privacy limits, and receives its page only after storage succeeds.
+FIRST VIEWPORT: Brand and headline lead; the upload field and primary action sit beneath the lead at left, balanced by the existing file-to-link schematic at right.
+FORM: Operate-mode extension of the established home surface; the upload is an accessible native form with a reusable drop target and inline states.
 -->
+<script lang="ts">
+	import UploadForm from '../lib/components/UploadForm.svelte';
+	import type { PageProps } from './$types';
+
+	let { data, form }: PageProps = $props();
+</script>
+
 <svelte:head>
 	<title>PageCourier — Markdown, ready to travel.</title>
 	<meta
@@ -45,6 +52,12 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 					PageCourier is built around one idea: Markdown should travel as a readable page, shared by
 					one link.
 				</p>
+				<UploadForm
+					id="start-upload"
+					uploadMaxBytes={data.uploadMaxBytes}
+					submitLabel="Upload and get a link"
+					actionError={form?.error}
+				/>
 				<a
 					class="github-link"
 					href="https://github.com/torstenwerner/PageCourier"

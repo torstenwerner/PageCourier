@@ -16,6 +16,9 @@
 	--line: #c5d0ca;
 	--blue: #1c596c;
 	--lime: #d7f05b;
+	--code-keyword: #b6d7f0;
+	--code-number: #f3c98b;
+	--code-comment: #c1d0d2;
 }
 
 * {

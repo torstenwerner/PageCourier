@@ -1,0 +1,43 @@
+:root {
+	font-family:
+		'Helvetica Neue', Helvetica, 'Segoe UI', Arial, sans-serif, 'Apple Color Emoji',
+		'Segoe UI Emoji';
+	color: #152c39;
+	background: #e8eeea;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+
+	--ink: #152c39;
+	--muted-ink: #52646b;
+	--surface: #f7f8f3;
+	--surface-muted: #e8eeea;
+	--line: #c5d0ca;
+	--blue: #1c596c;
+	--lime: #d7f05b;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	min-width: 320px;
+	min-height: 100vh;
+	margin: 0;
+}
+
+a {
+	color: inherit;
+}
+
+a:focus-visible {
+	outline: 3px solid #1c596c;
+	outline-offset: 4px;
+}
+
+::selection {
+	color: var(--ink);
+	background: var(--lime);
+}

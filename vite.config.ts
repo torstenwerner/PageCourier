@@ -11,7 +11,20 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			adapter: adapter(),
+			csrf: {
+				// Runtime hook validates the canonical origin for all state-changing requests.
+				trustedOrigins: ['*']
+			},
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'base-uri': ['self'],
+					'object-src': ['none'],
+					'frame-ancestors': ['none']
+				}
+			}
 		})
 	],
 	test: {

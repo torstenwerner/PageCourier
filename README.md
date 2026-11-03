@@ -1,8 +1,9 @@
 # PageCourier
 
 PageCourier is a web application for sharing rendered Markdown through a
-unique link. This repository currently contains the application foundation;
-upload and document-storage features are not implemented yet.
+unique link. The server supports immutable document uploads and downloads using
+private S3-compatible storage. The landing-page uploader and full Markdown
+reader interface are deferred; document pages currently display escaped source.
 
 ## Requirements
 
@@ -74,6 +75,109 @@ npm test                  # Unit and browser tests
 npm run build             # Production build
 ```
 
-The browser test builds and starts the production Node adapter locally. It
-does not require a live S3 service because this foundation does not yet read
-or write documents.
+The landing-page browser smoke test does not require S3. Unit tests include
+deterministic multipart, collision, storage-failure and route coverage.
+
+## Document API
+
+Submit exactly one multipart file field named `file` to `POST /documents`.
+Include an `Origin` header equal to `PUBLIC_ORIGIN`, even for API clients.
+Missing/null or mismatched origins are rejected. Files must have a
+case-insensitive `.md` or `.markdown` extension, strict UTF-8 encoding and
+non-whitespace content; MIME types are not authoritative.
+
+```sh
+curl -i -H 'Origin: http://localhost:3000' \
+  -F 'file=@notes.md' http://localhost:3000/documents
+```
+
+Only a confirmed S3 write produces a 303 redirect to the canonical
+`PUBLIC_ORIGIN/documents/{id}` location. Validation errors return JSON with an
+`error` message (400), oversized requests/files return 413, disallowed origins
+return 403, and operational storage failures return a safe 503. The document
+page retrieves source on the server. `GET /documents/{id}/download` returns
+the exact original bytes, including UTF-8 BOM and original line endings, with
+safe attachment filenames. Malformed, missing and operator-deleted IDs return
+404; permissions and storage outages are not treated as missing objects.
+
+Document/download responses use private, no-store caching, no indexing and
+no-referrer headers. Anyone with a document URL can retrieve its content; do
+not upload secrets. There are no application edit/delete or listing endpoints.
+
+### Upload and transport limits
+
+`UPLOAD_MAX_BYTES` applies to original file bytes, inclusive at the limit.
+Multipart transport has an additional 65,536-byte allowance. The parser rejects
+extra files/fields, malformed forms, filenames longer than 1,024 UTF-8 bytes,
+and oversized bodies even without a truthful Content-Length. It holds only
+bounded bytes in memory, never temporary document files. Parsing has a
+30-second deadline; multipart header blocks are also bounded by Busboy's
+16 KiB limit. Filename metadata is sanitized and limited to 180 code points.
+
+`npm start` derives the Node adapter's `BODY_SIZE_LIMIT` from the configured
+file limit plus this overhead. A runtime server hook checks all state-changing
+requests against `PUBLIC_ORIGIN`, replacing SvelteKit's request-host-based
+origin check so canonical submissions work behind proxies without trusting Host.
+Use this startup command rather than invoking `build/index.js` directly.
+Configure ingress/proxy body limits to allow at least the same transport size.
+Development's `PUBLIC_ORIGIN` must match the URL used to submit uploads.
+
+## Storage contract and operations
+
+Objects use `<S3_KEY_PREFIX>/documents/v1/<id>` (without the extra slash for an
+empty prefix). IDs are 16 cryptographically random bytes encoded as 32 lowercase
+hexadecimal characters. Keys never contain uploaded paths. Each upload creates
+one object whose body is the untouched original file and whose `filename`
+metadata is a base64-encoded UTF-8 safe basename. Downloads use an ASCII
+filename fallback and RFC 5987 `filename*` encoding.
+
+A single `PutObject` with `If-None-Match: *` atomically saves bytes and metadata.
+The service must support conditional create-only PUT semantics: a collision
+must return `PreconditionFailed` rather than overwrite. The app tries at most
+five fresh IDs on collisions. Conditional conflicts and other errors fail
+explicitly. SDK requests allow at most three attempts with a 3-second connection
+timeout and 10-second request timeout; object-body reads have a separate
+10-second deadline. No local-storage fallback or deduplication exists.
+An ambiguous interrupted write can leave a complete, unreachable object, but
+never produces a success redirect or a partially saved document.
+
+Provision a private bucket before starting the app. The application requires
+`s3:GetObject` and `s3:PutObject` on the configured object prefix, not object
+deletion. AWS additionally requires `s3:ListBucket` on the bucket to distinguish
+an absent key as 404: without it, AWS may return AccessDenied for missing keys,
+which the app correctly reports as an operational 503. Listing is not exposed
+by the application. Operators may enforce conditional writes using bucket
+policies in addition to application checks; verify compatible providers support
+the conditional PUT contract. The app does not require public bucket access.
+
+Use AWS's default credential chain/workload identity. For MinIO set
+`S3_ENDPOINT`, `S3_FORCE_PATH_STYLE=true`, and supply credentials externally via
+the default chain (for example `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`).
+Production requires HTTPS, including for MinIO; private CAs can be trusted via
+Node's `NODE_EXTRA_CA_CERTS`. Do not disable certificate verification.
+
+Retention is indefinite. Do not configure lifecycle expiration for application
+objects. Operators own storage capacity, backups/restoration and direct object
+deletion. Delete the document's single object using operator credentials to
+make its URL return 404; no cache or application-local state retains it.
+Restoring an object restores its URL. Replicas need only shared storage and the
+same canonical origin.
+
+### MinIO integration tests
+
+Against a dedicated disposable MinIO service, run:
+
+```sh
+MINIO_TEST_ENDPOINT=https://localhost:9000 \
+AWS_ACCESS_KEY_ID=<test-access-key> \
+AWS_SECRET_ACCESS_KEY=<test-secret-key> \
+npm run test:unit
+```
+
+The tests create randomly named test buckets and clean up only their own
+objects/buckets using test-admin permissions. They verify real conditional
+collisions, byte preservation, independent-client retrieval and operator
+deletion. Without `MINIO_TEST_ENDPOINT`, MinIO tests are explicitly skipped.
+The production-adapter integration test also requires `npm run build` first
+and an HTTPS MinIO endpoint; it starts isolated app instances to exercise
+real multipart requests, redirects, exact-size limits and downloads.

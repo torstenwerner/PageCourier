@@ -11,9 +11,11 @@ import {
 	UPLOAD_MAX_BYTES
 } from '$app/env/private';
 import { parseConfig } from './config';
+import { building } from '$app/env';
 
 export const appConfig = parseConfig({
 	...process.env,
+	NODE_ENV: building ? 'development' : process.env.NODE_ENV,
 	AWS_REGION,
 	HOST,
 	LOG_LEVEL,

@@ -19,7 +19,7 @@ Use the product's confirmed one-file-to-one-link purpose. Describe the intended 
 
 ## Chosen direction and memorable moment
 
-A restrained editorial, mobile-first frame: PageCourier identity and a large clear headline lead into a compact file-to-link schematic, with a GitHub project link beneath the copy. Mineral-green canvas, ink-navy diagram, signal-lime route marks, and one sans-serif family make the route the memorable moment.
+A restrained editorial, mobile-first frame: PageCourier identity and a large clear headline lead into a compact file-to-link schematic, with a GitHub project link beneath the copy. Keep the header descriptor to “Markdown sharing”; omit the diagram caption and page footer. Mineral-green canvas, ink-navy diagram, signal-lime route marks, and one sans-serif family make the route the memorable moment.
 
 ## Unresolved decisions
 

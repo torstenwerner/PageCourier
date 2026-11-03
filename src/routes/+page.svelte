@@ -34,7 +34,7 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 			</svg>
 			<span>PageCourier</span>
 		</div>
-		<p class="header-note">Markdown sharing for small teams</p>
+		<p class="header-note">Markdown sharing</p>
 	</header>
 
 	<main id="main">
@@ -59,7 +59,7 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 				</a>
 			</div>
 
-			<figure class="journey" aria-labelledby="journey-caption">
+			<figure class="journey" aria-label="One Markdown file becomes a page to share">
 				<div class="journey-topline">
 					<span>ONE FILE</span>
 					<span class="journey-rule" aria-hidden="true"></span>
@@ -94,17 +94,8 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 						<span class="link-caption">unique link</span>
 					</div>
 				</div>
-
-				<figcaption id="journey-caption">
-					One document, made readable and easy to pass along.
-				</figcaption>
 			</figure>
 		</section>
-
-		<footer class="site-footer">
-			<span>PageCourier</span>
-			<span>Keep the words. Send the page.</span>
-		</footer>
 	</main>
 </div>
 
@@ -158,8 +149,7 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 		height: 2.25rem;
 	}
 
-	.header-note,
-	.site-footer {
+	.header-note {
 		color: var(--muted-ink);
 		font-size: 0.875rem;
 	}
@@ -364,22 +354,6 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 		font-size: 0.85rem;
 	}
 
-	figcaption {
-		padding-top: 1.1rem;
-		border-top: 1px solid #50636b;
-		color: #d5e0dc;
-		font-size: 0.9rem;
-		line-height: 1.5;
-	}
-
-	.site-footer {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		padding-top: 1.2rem;
-		border-top: 1px solid var(--line);
-	}
-
 	@media (max-width: 800px) {
 		.page-frame {
 			width: min(100% - 2.5rem, 42rem);
@@ -449,11 +423,6 @@ FORM: Operate mode, scoped foundation shell; no concept-seed roll because the br
 		.link-mark svg {
 			width: 2.4rem;
 			height: 2.4rem;
-		}
-
-		.site-footer {
-			flex-wrap: wrap;
-			font-size: 0.8rem;
 		}
 	}
 </style>

@@ -11,7 +11,6 @@ colors:
   lime: '#d7f05b'
   journey-muted: '#d5e0dc'
   journey-rule: '#61747a'
-  journey-caption-rule: '#50636b'
   paper-fold: '#c8d2cc'
   paper-line: '#99a8a4'
   link-caption: '#f1f3ea'
@@ -64,11 +63,10 @@ The palette pairs a deep ink-navy foundation with cool mineral neutrals and a co
 
 - **Soft Paper** (`{colors.surface}`): Main reading surface and the paper illustration.
 - **Mineral Canvas** (`{colors.surface-muted}`): Page background and muted fold detail.
-- **Quiet Ink** (`{colors.muted-ink}`): Supporting copy, header note, and footer text.
+- **Quiet Ink** (`{colors.muted-ink}`): Supporting copy and the header note.
 - **Mineral Line** (`{colors.line}`): Fine page-level dividers.
 - **Journey Mist** (`{colors.journey-muted}`): Supporting text within the dark schematic.
 - **Slate Route Rule** (`{colors.journey-rule}`): The schematic's thin horizontal guide.
-- **Deep Route Divider** (`{colors.journey-caption-rule}`): The schematic caption separator.
 - **Fold Stone** (`{colors.paper-fold}`): Light half of the paper-corner fold.
 - **Paper Rule** (`{colors.paper-line}`): Secondary document lines.
 - **Pale Caption** (`{colors.link-caption}`): Link caption against the dark schematic.
@@ -91,9 +89,9 @@ The palette pairs a deep ink-navy foundation with cool mineral neutrals and a co
 
 ## Layout
 
-The desktop frame is centered and capped at 76rem, with 1.5rem outer gutters. The first-view composition uses an asymmetric two-column intro: copy on the left and a dark route diagram on the right, with a 4rem gap. Header and footer align to the same frame and use fine horizontal rules.
+The desktop frame is centered and capped at 76rem, with 1.5rem outer gutters. The first-view composition uses an asymmetric two-column intro: copy on the left and a dark route diagram on the right, with a 4rem gap. The header aligns to the same frame as the main content and uses a fine horizontal rule.
 
-At 800px and below, the frame narrows to a maximum of 42rem with 1.25rem gutters, and the intro becomes one column with the diagram following the copy. At 480px and below, the frame uses 1rem side gutters; the diagram's internal spacing and illustration scale tighten, and the footer may wrap. The page maintains a 320px minimum viewport width.
+At 800px and below, the frame narrows to a maximum of 42rem with 1.25rem gutters, and the intro becomes one column with the diagram following the copy. At 480px and below, the frame uses 1rem side gutters and the diagram's internal spacing and illustration scale tighten. The page maintains a 320px minimum viewport width.
 
 ## Elevation & Depth
 
@@ -108,12 +106,12 @@ The page and diagram are square-cornered and rely on color blocks and thin rules
 ### Brand lockup
 
 - Pair the compact document glyph with the bold wordmark; the glyph uses a lime tile, ink paper shape, and light document lines.
-- Keep the descriptor aligned opposite the lockup in muted text; it becomes right-aligned and width-constrained on narrow screens.
+- Keep the short descriptor aligned opposite the lockup in muted text.
 
 ### Journey diagram
 
 - Use a dark, flat panel with a tracked “one file / one link” topline, a paper source, a lime dotted transfer arrow, and a circular link endpoint.
-- Keep step labels small, uppercase, and tracked. Separate the short caption with a fine rule.
+- Keep step labels small, uppercase, and tracked.
 - The diagram is illustrative, not a button, upload field, or other control.
 
 ### GitHub project link

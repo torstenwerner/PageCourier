@@ -1,7 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import {
+	GetObjectCommand,
+	HeadBucketCommand,
+	PutObjectCommand,
+	type S3Client
+} from '@aws-sdk/client-s3';
 import type { AppConfig } from './config';
+import { logRuntimeEvent, type RuntimeClassification, type RuntimeOperation } from './logging';
 
 export class DocumentFailure extends Error {
 	constructor(
@@ -43,19 +49,23 @@ function errorName(error: unknown): string {
 	return error instanceof Error ? error.name : 'Unknown';
 }
 
-export function operationalFailure(operation: string, cause: unknown): never {
+function storageClassification(name: string): RuntimeClassification {
+	switch (name) {
+		case 'AccessDenied':
+		case 'NoSuchBucket':
+		case 'TimeoutError':
+		case 'PreconditionFailed':
+		case 'ConditionalRequestConflict':
+			return name;
+		default:
+			return 'StorageFailure';
+	}
+}
+
+export function operationalFailure(operation: RuntimeOperation, cause: unknown): never {
 	// Never serialize provider errors: their messages may contain endpoints or object keys.
-	const name = errorName(cause);
-	const classification = [
-		'AccessDenied',
-		'NoSuchBucket',
-		'TimeoutError',
-		'PreconditionFailed',
-		'ConditionalRequestConflict'
-	].includes(name)
-		? name
-		: 'StorageFailure';
-	console.error(JSON.stringify({ level: 'error', operation, classification }));
+	const classification = storageClassification(errorName(cause));
+	logRuntimeEvent('error', operation, classification);
 	throw new DocumentFailure(503, 'Document storage is temporarily unavailable. Please try again.');
 }
 
@@ -76,6 +86,20 @@ export class DocumentStore {
 	private key(id: string): string {
 		const prefix = this.config.keyPrefix.replace(/\/?$/, '/');
 		return `${this.config.keyPrefix ? prefix : ''}documents/v1/${id}`;
+	}
+
+	async checkReady(): Promise<void> {
+		try {
+			await this.client.send(new HeadBucketCommand({ Bucket: this.config.bucket }), {
+				abortSignal: AbortSignal.timeout(10_000)
+			});
+		} catch (cause) {
+			operationalFailure('readiness', cause);
+		}
+	}
+
+	close(): void {
+		this.client.destroy();
 	}
 
 	async create(bytes: Uint8Array, filename: string): Promise<string> {

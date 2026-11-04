@@ -92,6 +92,11 @@ describe.skipIf(!endpoint?.startsWith('https:'))('production adapter with MinIO 
 					await delay(100);
 				}
 				if (!ready) throw new Error('Production app did not become ready.');
+				const live = await fetch(`http://127.0.0.1:${port}/health/live`);
+				expect(live.status).toBe(200);
+				expect(live.headers.get('cache-control')).toBe('no-store');
+				const storageReady = await fetch(`http://127.0.0.1:${port}/health/ready`);
+				expect(storageReady.status).toBe(200);
 			}
 			const upload = async (bytes: Uint8Array, name = 'café.md', requestOrigin = origin) => {
 				const form = new FormData();
@@ -161,6 +166,8 @@ describe.skipIf(!endpoint?.startsWith('https:'))('production adapter with MinIO 
 			expect(failed.status).toBe(503);
 			expect(failed.headers.get('location')).toBeNull();
 			expect((await fetch(`${replica}${path}/download`)).status).toBe(503);
+			expect((await fetch(`${replica}/health/ready`)).status).toBe(503);
+			expect((await fetch(`${replica}/health/live`)).status).toBe(200);
 			expect(logs.join('')).not.toContain(path.split('/').at(-1));
 			expect(logs.join('')).not.toContain(endpoint);
 			expect(logs.join('')).not.toContain('# Hello');
@@ -169,7 +176,9 @@ describe.skipIf(!endpoint?.startsWith('https:'))('production adapter with MinIO 
 				if (child.exitCode === null) {
 					const closed = once(child, 'close');
 					child.kill('SIGTERM');
-					await closed;
+					const [code, signal] = await closed;
+					expect(code).toBe(0);
+					expect(signal).toBeNull();
 				}
 			}
 			await cleanBucket(client, bucket);

@@ -1,5 +1,10 @@
 import { Readable } from 'node:stream';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+	S3Client,
+	PutObjectCommand,
+	GetObjectCommand,
+	HeadBucketCommand
+} from '@aws-sdk/client-s3';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { DocumentStore, attachment, safeFilename, validId } from './documents';
 
@@ -8,6 +13,45 @@ const id = 'a'.repeat(32);
 afterEach(() => vi.restoreAllMocks());
 
 describe('document storage', () => {
+	it('checks bucket readiness with one bounded, non-writing request', async () => {
+		const client = new S3Client({ region: config.region });
+		const send = vi.spyOn(client, 'send').mockResolvedValue(undefined);
+		const store = new DocumentStore(client, config, 100);
+
+		await store.checkReady();
+
+		expect(send).toHaveBeenCalledOnce();
+		expect(send.mock.calls[0][0]).toBeInstanceOf(HeadBucketCommand);
+		expect(send.mock.calls[0][0].input).toEqual({ Bucket: config.bucket });
+		expect(send.mock.calls[0][1]?.abortSignal).toBeInstanceOf(AbortSignal);
+	});
+
+	it('logs safe readiness failures and returns an operational error', async () => {
+		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const client = new S3Client({ region: config.region });
+		vi.spyOn(client, 'send').mockRejectedValue(
+			Object.assign(new Error('secret endpoint and bucket details'), { name: 'AccessDenied' })
+		);
+
+		await expect(new DocumentStore(client, config, 100).checkReady()).rejects.toMatchObject({
+			status: 503,
+			message: expect.not.stringContaining('secret endpoint')
+		});
+		const event = log.mock.calls[0][0] as string;
+		expect(event).toContain('"operation":"readiness"');
+		expect(event).toContain('"classification":"AccessDenied"');
+		expect(event).not.toContain('secret endpoint');
+	});
+
+	it('destroys its storage client when closed', () => {
+		const client = new S3Client({ region: config.region });
+		const destroy = vi.spyOn(client, 'destroy').mockImplementation(() => {});
+
+		new DocumentStore(client, config, 100).close();
+
+		expect(destroy).toHaveBeenCalledOnce();
+	});
+
 	it('uses create-only server keys, preserves bytes and retries collisions with fresh IDs', async () => {
 		const client = new S3Client({ region: config.region });
 		const send = vi

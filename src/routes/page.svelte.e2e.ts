@@ -35,6 +35,7 @@ test('home page keeps its introduction and offers an accessible responsive uploa
 		'href',
 		'https://github.com/torstenwerner/PageCourier'
 	);
+	await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
 	await expect(page.getByLabel('Choose a Markdown file or drop it here')).toBeVisible();
 	await expect(page.getByText('.md or .markdown · Maximum 5 MiB')).toBeVisible();
 	await expect(page.getByText(/Share links can be forwarded/)).toBeVisible();
@@ -58,6 +59,18 @@ test('home page keeps its introduction and offers an accessible responsive uploa
 			() => document.documentElement.scrollWidth <= document.documentElement.clientWidth
 		)
 	).toBe(true);
+});
+
+test('keeps liveness independent from storage and verifies readiness', async ({ request }) => {
+	const live = await request.get('/health/live');
+	expect(live.status()).toBe(200);
+	expect(live.headers()['cache-control']).toBe('no-store');
+	expect(await live.json()).toEqual({ status: 'ok' });
+
+	const ready = await request.get('/health/ready');
+	expect(ready.status()).toBe(200);
+	expect(ready.headers()['cache-control']).toBe('no-store');
+	expect(await ready.json()).toEqual({ status: 'ready' });
 });
 
 test('validates a dropped file and redirects to the server-rendered document after storage', async ({
@@ -231,6 +244,18 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 	context
 }) => {
 	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+	const imageRequests: string[] = [];
+	await page.route('https://images.example.test/photo.png', async (route) => {
+		imageRequests.push(route.request().url());
+		await route.fulfill({
+			status: 200,
+			contentType: 'image/png',
+			body: Buffer.from(
+				'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=',
+				'base64'
+			)
+		});
+	});
 	await page.addInitScript(() => {
 		(window as Window & { mermaidPayloadExecuted?: boolean }).mermaidPayloadExecuted = false;
 	});
@@ -247,6 +272,10 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 		'Start[Start] --> Decision{Ready?}',
 		'Decision --> Finish[Done]',
 		'```',
+		'',
+		'![Remote image](https://images.example.test/photo.png)',
+		'',
+		'![Insecure image](http://images.example.test/photo.png)',
 		'',
 		'```mermaid',
 		'flowchart TD',
@@ -290,11 +319,25 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 	const documentResponse = await page.reload();
 	const csp = documentResponse?.headers()['content-security-policy'];
 	if (!csp) throw new Error('Document response is missing a Content-Security-Policy header.');
+	expect(documentResponse?.headers()['cache-control']).toBe('private, no-store');
+	expect(documentResponse?.headers()['x-robots-tag']).toBe('noindex, nofollow');
+	expect(documentResponse?.headers()['referrer-policy']).toBe('no-referrer');
+	expect(documentResponse?.headers()['x-content-type-options']).toBe('nosniff');
+	expect(documentResponse?.headers()['x-frame-options']).toBe('DENY');
 	expect(csp).toContain("style-src 'self' 'nonce-");
+	expect(csp).toContain("img-src 'self' https:");
 	expect(csp).not.toContain('unsafe-inline');
 	const styleNonce = csp.match(/style-src[^;]*'nonce-([^']+)'/)?.[1];
 	expect(styleNonce).toBeTruthy();
 	await expect(page.getByRole('heading', { name: 'Mermaid rendering' })).toBeVisible();
+	const remoteImage = page.locator('.markdown-body img');
+	await expect(remoteImage).toHaveAttribute('src', 'https://images.example.test/photo.png');
+	await expect
+		.poll(() => remoteImage.evaluate((image: HTMLImageElement) => image.naturalWidth))
+		.toBe(1);
+	expect(imageRequests.length).toBeGreaterThan(0);
+	expect(imageRequests.every((url) => url === 'https://images.example.test/photo.png')).toBe(true);
+	await expect(page.locator('.markdown-body img[src^="http://"]')).toHaveCount(0);
 	await expect(page.locator('.mermaid-output svg')).toHaveCount(1);
 	await expect(page.getByRole('img', { name: 'Rendered Mermaid flowchart' })).toBeVisible();
 	const diagramBounds = await page.locator('.mermaid-output svg').evaluate((svg) => {

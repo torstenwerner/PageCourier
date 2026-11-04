@@ -7,6 +7,13 @@ const objects = new Map();
 const storage = createServer(async (request, response) => {
 	const url = new URL(request.url ?? '/', 'http://127.0.0.1');
 	const prefix = `/${bucket}/`;
+	if (
+		request.method === 'HEAD' &&
+		(url.pathname === `/${bucket}` || url.pathname === `/${bucket}/`)
+	) {
+		response.writeHead(200).end();
+		return;
+	}
 	if (!url.pathname.startsWith(prefix)) {
 		response.writeHead(404).end();
 		return;

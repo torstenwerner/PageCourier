@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mermaidLimits } from '../lib/mermaid/limits';
+import { withStorageOutage } from '../../tests/compose';
 
 async function upload(
 	page: import('@playwright/test').Page,
@@ -114,7 +115,8 @@ test('validates a dropped file and redirects to the server-rendered document aft
 });
 
 test('shows storage failure without replacing a document, then uploads a distinct document', async ({
-	page
+	page,
+	baseURL
 }) => {
 	await page.goto('/');
 	const originalUrl = await upload(
@@ -124,18 +126,26 @@ test('shows storage failure without replacing a document, then uploads a distinc
 		'# Original notes\n\nThe first document remains unchanged.\n'
 	);
 
-	await page.locator('#document-upload').setInputFiles({
-		name: 'storage-fail.md',
-		mimeType: 'text/markdown',
-		buffer: Buffer.from('# Failed upload\n')
-	});
-	await expect(page.getByText('Selected: storage-fail.md', { exact: false })).toBeVisible();
-	await page.getByRole('button', { name: 'Upload another file' }).click();
-	await expect(page.getByRole('alert')).toContainText('storage is temporarily unavailable');
-	await expect(page).toHaveURL(originalUrl);
-	await expect(page.locator('.markdown-body')).toContainText(
-		'The first document remains unchanged.'
-	);
+	const failUpload = async () => {
+		await page.locator('#document-upload').setInputFiles({
+			name: 'storage-fail.md',
+			mimeType: 'text/markdown',
+			buffer: Buffer.from('# Failed upload\n')
+		});
+		await expect(page.getByText('Selected: storage-fail.md', { exact: false })).toBeVisible();
+		await page.getByRole('button', { name: 'Upload another file' }).click();
+		await expect(page.getByRole('alert')).toContainText('storage is temporarily unavailable');
+		await expect(page).toHaveURL(originalUrl);
+		await expect(page.locator('.markdown-body')).toContainText(
+			'The first document remains unchanged.'
+		);
+	};
+	if (process.env.E2E_COMPOSE_PROJECT) {
+		if (!baseURL) throw new Error('Missing production acceptance origin.');
+		await withStorageOutage(baseURL, failUpload);
+	} else {
+		await failUpload();
+	}
 
 	const nextUrl = await upload(
 		page,
@@ -181,8 +191,21 @@ test('shows busy state, preserves original bytes for download, and copies the ca
 		buffer: Buffer.from(source)
 	});
 	await expect(page.getByText('Selected: slow.md', { exact: false })).toBeVisible();
+	let releaseUpload: () => void = () => {};
+	const heldUpload = new Promise<void>((resolve) => {
+		releaseUpload = resolve;
+	});
+	await page.route('**/*', async (route) => {
+		if (route.request().method() === 'POST') await heldUpload;
+		await route.continue();
+	});
 	await page.getByRole('button', { name: 'Upload and get a link' }).click();
-	await expect(page.getByRole('status')).toContainText('Uploading and saving');
+	try {
+		await expect(page.getByRole('status')).toContainText('Uploading and saving');
+		await expect(page.locator('button[type="submit"][aria-busy="true"]')).toBeDisabled();
+	} finally {
+		releaseUpload();
+	}
 	await expect(page).toHaveURL(/\/documents\/[a-f0-9]{32}$/);
 	const documentUrl = page.url();
 	await expect(page.getByRole('heading', { name: 'Download check' })).toBeVisible();

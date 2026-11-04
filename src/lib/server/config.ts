@@ -59,7 +59,7 @@ function parseOrigin(value: string): string {
 	return url.origin;
 }
 
-function parseEndpoint(value: string, isProduction: boolean): string {
+function parseEndpoint(value: string, isProduction: boolean, allowLocalHttp: boolean): string {
 	let url: URL;
 	try {
 		url = new URL(value);
@@ -83,7 +83,11 @@ function parseEndpoint(value: string, isProduction: boolean): string {
 		);
 	}
 
-	if (isProduction && url.protocol !== 'https:') {
+	if (
+		isProduction &&
+		url.protocol !== 'https:' &&
+		!(allowLocalHttp && ['minio', 'localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+	) {
 		return invalid('S3_ENDPOINT', 'must use HTTPS in production.');
 	}
 
@@ -131,6 +135,13 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
 	const publicOrigin = env.PUBLIC_ORIGIN
 		? parseOrigin(env.PUBLIC_ORIGIN)
 		: `http://localhost:${port}`;
+	const allowLocalHttp = parseBoolean('S3_ALLOW_LOCAL_HTTP', env.S3_ALLOW_LOCAL_HTTP ?? 'false');
+	if (
+		allowLocalHttp &&
+		!['localhost', '127.0.0.1', '[::1]'].includes(new URL(publicOrigin).hostname)
+	) {
+		return invalid('S3_ALLOW_LOCAL_HTTP', 'requires a loopback PUBLIC_ORIGIN.');
+	}
 
 	const uploadMaxBytes = parseInteger(
 		'UPLOAD_MAX_BYTES',
@@ -149,7 +160,9 @@ export function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
 		return invalid('AWS_REGION', 'must be a non-empty region without surrounding whitespace.');
 	}
 
-	const endpoint = env.S3_ENDPOINT ? parseEndpoint(env.S3_ENDPOINT, isProduction) : undefined;
+	const endpoint = env.S3_ENDPOINT
+		? parseEndpoint(env.S3_ENDPOINT, isProduction, allowLocalHttp)
+		: undefined;
 	const forcePathStyle = parseBoolean('S3_FORCE_PATH_STYLE', env.S3_FORCE_PATH_STYLE ?? 'false');
 	const keyPrefix = env.S3_KEY_PREFIX ?? '';
 	if (

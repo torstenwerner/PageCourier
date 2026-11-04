@@ -9,6 +9,7 @@ original downloads.
 
 - Node.js 24 LTS and npm
 - Playwright's Chromium browser to run browser tests
+- Docker with Compose v2 and BuildKit for the local production stack
 
 Use `nvm use` to select the Node version from `.nvmrc`, then install the locked
 dependencies:
@@ -23,18 +24,19 @@ Development starts with safe local defaults. Copy `.env.example` to `.env` to
 override them. SvelteKit loads `.env` for development; never put credentials in
 the example file or client-side code.
 
-| Variable              | Required   | Default                   | Description                                                                                                  |
-| --------------------- | ---------- | ------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `PUBLIC_ORIGIN`       | Production | `http://localhost:<PORT>` | Canonical HTTP(S) origin used for public links. It must not include a path, query, fragment, or credentials. |
-| `HOST`                | No         | `0.0.0.0`                 | Address on which the Node server listens.                                                                    |
-| `PORT`                | No         | `3000`                    | Listen port, from 1 through 65,535.                                                                          |
-| `UPLOAD_MAX_BYTES`    | No         | `5242880`                 | Positive, safe-integer upload limit in bytes (5 MiB by default).                                             |
-| `LOG_LEVEL`           | No         | `info`                    | Minimum structured application log level: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.             |
-| `S3_BUCKET`           | Production | `pagecourier-development` | S3-compatible bucket name.                                                                                   |
-| `AWS_REGION`          | Production | `us-east-1`               | AWS region for the bucket.                                                                                   |
-| `S3_ENDPOINT`         | No         | unset                     | Optional custom HTTP(S) endpoint; production endpoints must use HTTPS.                                       |
-| `S3_FORCE_PATH_STYLE` | No         | `false`                   | Whether to use path-style S3 addressing. Must be `true` or `false`.                                          |
-| `S3_KEY_PREFIX`       | No         | empty                     | Optional key prefix, without a leading slash or `..` path segment.                                           |
+| Variable              | Required   | Default                   | Description                                                                                                                                                                           |
+| --------------------- | ---------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PUBLIC_ORIGIN`       | Production | `http://localhost:<PORT>` | Canonical HTTP(S) origin used for public links. It must not include a path, query, fragment, or credentials.                                                                          |
+| `HOST`                | No         | `0.0.0.0`                 | Address on which the Node server listens.                                                                                                                                             |
+| `PORT`                | No         | `3000`                    | Listen port, from 1 through 65,535.                                                                                                                                                   |
+| `UPLOAD_MAX_BYTES`    | No         | `5242880`                 | Positive, safe-integer upload limit in bytes (5 MiB by default).                                                                                                                      |
+| `LOG_LEVEL`           | No         | `info`                    | Minimum structured application log level: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.                                                                                      |
+| `S3_BUCKET`           | Production | `pagecourier-development` | S3-compatible bucket name.                                                                                                                                                            |
+| `AWS_REGION`          | Production | `us-east-1`               | AWS region for the bucket.                                                                                                                                                            |
+| `S3_ENDPOINT`         | No         | unset                     | Optional custom HTTP(S) endpoint; production endpoints must use HTTPS.                                                                                                                |
+| `S3_ALLOW_LOCAL_HTTP` | No         | `false`                   | Explicit local-testing exception: HTTP endpoints named `minio`, `localhost`, `127.0.0.1`, or `[::1]` only, with a loopback canonical origin. Never enable for production deployments. |
+| `S3_FORCE_PATH_STYLE` | No         | `false`                   | Whether to use path-style S3 addressing. Must be `true` or `false`.                                                                                                                   |
+| `S3_KEY_PREFIX`       | No         | empty                     | Optional key prefix, without a leading slash or `..` path segment.                                                                                                                    |
 
 Production configuration is validated before the server starts. Set
 `PUBLIC_ORIGIN`, `S3_BUCKET`, and `AWS_REGION` in the deployment environment.
@@ -88,6 +90,7 @@ npm run lint              # Prettier and ESLint
 npm run test:unit         # Vitest unit tests
 npm run test:e2e:install  # Install Playwright Chromium once
 npm run test:e2e          # Node-adapter browser journeys with local test storage
+npm run test:acceptance   # Isolated production containers and real MinIO (Docker required)
 npm test                  # Unit and browser tests
 npm run build             # Production build
 ```
@@ -95,6 +98,121 @@ npm run build             # Production build
 The browser suite uses an isolated local S3-protocol test server; no external
 storage service or credentials are required. Unit tests include deterministic
 multipart, collision, storage-failure, rendering-safety and route coverage.
+The production acceptance command instead uses the exact production image and
+real MinIO; it is the release acceptance gate, not a replacement for fast tests.
+
+## Local production-container stack
+
+**This Compose stack is for local development and acceptance only, not a
+production deployment template.** Ports bind to loopback. All credentials in
+`compose.yaml` and the provisioning script are explicitly public development-only
+values. Never reuse them elsewhere. The application image has no credentials or
+local storage defaults baked into it.
+
+From a clean checkout with Docker running:
+
+```sh
+docker compose up --build --detach --wait --wait-timeout 180
+# Open http://127.0.0.1:3000 (localhost redirects to the configured origin).
+docker compose logs --follow app
+docker compose up --build --detach --wait app  # Rebuild after source changes
+docker compose restart                       # Retains uploaded documents
+docker compose down                          # Also retains uploaded documents
+```
+
+MinIO stores objects in the project-scoped `minio-data` named volume. Provisioning
+automatically creates the private `pagecourier-development` bucket and a separate
+application user limited to `ListBucket`, `GetObject`, and `PutObject`; it cannot
+delete objects. Re-provisioning is idempotent and does not delete documents.
+MinIO's API is at `http://127.0.0.1:9000`; its browser console is disabled.
+The app runs as UID 1000, with read-only root storage, no Linux capabilities,
+no privilege escalation, and a 16 MiB `/tmp` tmpfs. Document bytes are bounded
+in-memory buffers, not files in that mount. SIGTERM drains requests; Compose's
+15-second stop grace exceeds the configured 10-second adapter shutdown deadline.
+
+Compose explicitly enables `S3_ALLOW_LOCAL_HTTP=true` for `http://minio:9000`
+and the loopback public origin. Production mode and all other validation remain
+active. Normal production configurations still reject HTTP storage endpoints;
+use HTTPS and external credentials in real deployments. To change local ports,
+set `APP_PORT` and/or `MINIO_PORT` consistently for every Compose command.
+Compose honors `PUBLIC_ORIGIN` from the environment or `.env`, defaulting to
+`http://127.0.0.1:${APP_PORT:-3000}`. If you set `APP_PORT`, also update any explicit
+`PUBLIC_ORIGIN` to match. Local page visits using another loopback hostname on the
+same port redirect to the configured origin before displaying the
+upload form. POST requests still require that exact origin; aliases, missing
+origins, and unrelated sites are not accepted. After configuration or source
+changes, run `docker compose up --build --detach --wait app` and reload the page.
+
+Upstream MinIO community image tags are no longer available from the original
+registries. `containers/minio.Dockerfile` therefore builds the server and client
+from fixed upstream Git commits with a digest-pinned Go toolchain and runtime.
+Their AGPL license texts accompany those local images, and their exact source
+revisions are recorded in OCI labels. These local storage images are separate
+from the MIT-licensed PageCourier image and are not publishing artifacts.
+Initial storage builds download upstream sources/Go dependencies and can need
+substantial memory. Update the reviewed commits and base digests deliberately.
+
+To **deliberately and permanently remove all documents in this local stack**:
+
+```sh
+docker compose down --volumes
+```
+
+Do not add `--volumes` to ordinary shutdowns. Changing the Compose project name
+uses a different volume; it does not erase the previous project's data.
+
+### Production acceptance and architecture builds
+
+```sh
+npm ci
+npm run test:e2e:install
+npm run test:acceptance
+
+# Build each supported application architecture locally, without publishing.
+docker buildx build --platform linux/amd64 --load -t pagecourier:amd64 .
+docker buildx build --platform linux/arm64 --load -t pagecourier:arm64 .
+```
+
+Acceptance creates a uniquely named `pagecourier-acceptance-*` Compose project
+with dynamically allocated loopback ports, builds the production app, runs unit
+tests (including real MinIO conditional collisions) and shared Chromium journeys,
+and exercises a second production replica. It stops/restarts storage and replaces
+app containers only in that isolated project. A `finally` cleanup removes only
+the acceptance project's containers and disposable volume; the ordinary local
+stack remains untouched. SIGINT/SIGTERM also trigger cleanup. A forced process
+kill or Docker daemon failure can require manual cleanup of the exact project
+name shown in the output. Never clean up other projects indiscriminately.
+
+The browser busy-state test delays a request before forwarding it unchanged,
+and the remote-image test supplies a deterministic HTTPS image. Application
+requests still reach the production server and all uploads use real MinIO.
+Storage failures are real service outages, not filename-triggered S3 mocks.
+Deterministic collision injection stays in unit/storage tests, not the image.
+Published multi-architecture manifest verification belongs to the publishing
+workflow task.
+
+| Acceptance criteria  | Coverage                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-01, AC-02         | Shared Chromium start-page/drop/document-page upload journeys with real storage.                                                                              |
+| AC-03, AC-04, AC-05  | Container integration: duplicate uploads, app restart/replacement, second replica, MinIO restart, exact BOM/CRLF bytes and safe filenames.                    |
+| AC-06                | Chromium clipboard success and unavailable-access fallback.                                                                                                   |
+| AC-07                | Deterministic Markdown/GFM/anchors/code-language tests; shared browser rendering journeys.                                                                    |
+| AC-08, AC-09         | Shared Chromium Mermaid/CSP/payload tests plus deterministic sanitizer and complexity-boundary tests.                                                         |
+| AC-10                | Real production multipart uploads at exactly 5,242,880 bytes and one byte above, empty/blank/invalid UTF-8/extension rejection; bounded multipart unit tests. |
+| AC-11                | Real deletion/missing-ID 404 and storage-outage upload/read/download 503, independent liveness and readiness; browser failed-upload preservation.             |
+| AC-12, AC-13         | Shared HTTPS-image, keyboard, busy/error/clipboard feedback and mobile-overflow journeys; deterministic URL sanitizer tests.                                  |
+| AC-16 (local), AC-17 | Compose provisioning/persistence, both architecture builds; real MinIO conditional collision test plus deterministic retry bounds.                            |
+| AC-18                | Container/browser response headers, captured redacted app diagnostics, non-writing readiness and deterministic failure-path tests.                            |
+| AC-19                | Container server-rendered escaped Open Graph metadata plus deterministic title/excerpt/escaping tests.                                                        |
+
+If startup fails, inspect `docker compose ps --all` and
+`docker compose logs app provision`; verify Docker has enough disk/memory and
+the loopback ports are free. Missing buckets or denied storage access produce
+unhealthy readiness but healthy liveness; verify provisioning succeeded instead
+of repeatedly restarting the app. Access the app by its configured canonical
+origin, not `localhost` when Compose specifies `127.0.0.1`. For custom production
+storage, use HTTPS and do not disable certificate verification. Keep provider
+debug/access logging out of captured acceptance artifacts.
 
 ## Document API
 

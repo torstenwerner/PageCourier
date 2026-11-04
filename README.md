@@ -189,22 +189,23 @@ and the remote-image test supplies a deterministic HTTPS image. Application
 requests still reach the production server and all uploads use real MinIO.
 Storage failures are real service outages, not filename-triggered S3 mocks.
 Deterministic collision injection stays in unit/storage tests, not the image.
-Published multi-architecture manifest verification belongs to the publishing
-workflow task.
 
-| Acceptance criteria  | Coverage                                                                                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AC-01, AC-02         | Shared Chromium start-page/drop/document-page upload journeys with real storage.                                                                              |
-| AC-03, AC-04, AC-05  | Container integration: duplicate uploads, app restart/replacement, second replica, MinIO restart, exact BOM/CRLF bytes and safe filenames.                    |
-| AC-06                | Chromium clipboard success and unavailable-access fallback.                                                                                                   |
-| AC-07                | Deterministic Markdown/GFM/anchors/code-language tests; shared browser rendering journeys.                                                                    |
-| AC-08, AC-09         | Shared Chromium Mermaid/CSP/payload tests plus deterministic sanitizer and complexity-boundary tests.                                                         |
-| AC-10                | Real production multipart uploads at exactly 5,242,880 bytes and one byte above, empty/blank/invalid UTF-8/extension rejection; bounded multipart unit tests. |
-| AC-11                | Real deletion/missing-ID 404 and storage-outage upload/read/download 503, independent liveness and readiness; browser failed-upload preservation.             |
-| AC-12, AC-13         | Shared HTTPS-image, keyboard, busy/error/clipboard feedback and mobile-overflow journeys; deterministic URL sanitizer tests.                                  |
-| AC-16 (local), AC-17 | Compose provisioning/persistence, both architecture builds; real MinIO conditional collision test plus deterministic retry bounds.                            |
-| AC-18                | Container/browser response headers, captured redacted app diagnostics, non-writing readiness and deterministic failure-path tests.                            |
-| AC-19                | Container server-rendered escaped Open Graph metadata plus deterministic title/excerpt/escaping tests.                                                        |
+| Acceptance criteria | Coverage                                                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-01–02            | Shared Chromium start-page/drop/document-page upload journeys with real storage.                                                                                        |
+| AC-03–05            | Container integration: duplicate uploads, app restart/replacement, second replica, MinIO restart, exact BOM/CRLF bytes, and safe filenames.                             |
+| AC-06               | Chromium clipboard success and unavailable-access fallback.                                                                                                             |
+| AC-07               | Deterministic Markdown/GFM/anchors/code-language tests; shared browser rendering journeys.                                                                              |
+| AC-08–09            | Shared Chromium Mermaid/CSP/payload tests plus deterministic sanitizer and complexity-boundary tests.                                                                   |
+| AC-10               | Real production multipart uploads at exactly 5,242,880 bytes and one byte above, empty/blank/invalid UTF-8/extension rejection; bounded multipart unit tests.           |
+| AC-11               | Real deletion/missing-ID 404 and storage-outage upload/read/download 503, independent liveness and readiness; browser failed-upload preservation.                       |
+| AC-12–13            | Shared HTTPS-image, keyboard, busy/error/clipboard feedback and mobile-overflow journeys; deterministic URL sanitizer tests.                                            |
+| AC-14               | `npm run helm:check` lints, packages, and renders all four modes, including the no-optional-CRDs `none` mode.                                                           |
+| AC-15               | Helm checks and artifact-publishing tests verify chart/image correspondence and reject invalid release refs or metadata.                                                |
+| AC-16               | Compose covers local storage; publishing builds and inspects the actual release manifest for `linux/amd64` and `linux/arm64`, then verifies unauthenticated GHCR pulls. |
+| AC-17               | Real MinIO conditional collision test plus deterministic retry bounds.                                                                                                  |
+| AC-18               | Container/browser response headers, captured redacted app diagnostics, non-writing readiness and deterministic failure-path tests.                                      |
+| AC-19               | Container server-rendered escaped Open Graph metadata plus deterministic title/excerpt/escaping tests.                                                                  |
 
 If startup fails, inspect `docker compose ps --all` and
 `docker compose logs app provision`; verify Docker has enough disk/memory and
@@ -214,6 +215,70 @@ of repeatedly restarting the app. Access the app by its configured canonical
 origin, not `localhost` when Compose specifies `127.0.0.1`. For custom production
 storage, use HTTPS and do not disable certificate verification. Keep provider
 debug/access logging out of captured acceptance artifacts.
+
+The workflow's PR checks exercise these automated gates. Public package
+visibility, unauthenticated consumption, and any real cluster routing remain
+separately reported external verification gates; rendering is not evidence of
+an installed controller or successful routing.
+
+## CI and release artifacts
+
+`.github/workflows/ci.yml` runs type checks, formatting/lint, unit and
+integration tests, Chromium browser tests, the production-container/MinIO
+acceptance suite, Helm lint/package/render checks, and production application
+and image builds. Pull-request runs have read-only repository permissions and
+never publish artifacts. The publish job only runs on pushes to `main` or
+version tags, and it cannot start unless all validation succeeds. It does not
+deploy, install, upgrade, or roll back a Helm release and has no Kubernetes
+credentials.
+
+Each successful `main` run publishes a traceable image tag containing the full
+commit SHA and a run/attempt suffix, plus a unique SemVer chart version of the
+form `0.0.1-dev.<run-number>.<run-attempt>`. The chart's `appVersion` is the
+exact image tag. A `v1.2.3` tag publishes image and chart version `1.2.3`.
+Release images are built for `linux/amd64` and `linux/arm64`; the workflow
+inspects the pushed manifest and image labels and verifies the packaged chart's
+version, image reference, source, revision, and MIT license metadata. Image and
+chart packages carry the public repository source metadata used for package
+linkage.
+
+Before the first publish, a repository owner should:
+
+1. Enable GitHub Actions and allow the repository's `GITHUB_TOKEN` to publish
+   packages. The workflow requests `packages: write` only in its publish job;
+   no registry token or secret is committed or required.
+2. Ensure the GHCR image package
+   `ghcr.io/torstenwerner/pagecourier` and OCI chart package
+   `ghcr.io/torstenwerner/charts/pagecourier` are public and linked to
+   `torstenwerner/PageCourier`. In each package's settings, grant the
+   repository Actions access if it is not inherited automatically. GitHub may
+   require an owner to change package visibility or link a package manually.
+   If a package is created by the first push, set it public after publication
+   and run the unauthenticated verification commands below; do not rerun that
+   release, because its version is immutable.
+3. Keep release tags in `vX.Y.Z` form. Release versions are immutable: before
+   publishing, CI checks both registry paths and fails if either version
+   already exists. This also fails closed on a retry after partial publication;
+   reconcile such a release manually from the original tag rather than
+   overwriting or silently replacing an artifact.
+
+After publication, CI logs out of GHCR and Helm before pulling both artifacts
+without credentials. This verifies public consumption and matching chart
+metadata, not merely authenticated publication. A failed public pull means an
+owner must correct package visibility/access before claiming the distribution
+gate is met. Verify the release manifest independently with:
+
+```sh
+docker buildx imagetools inspect ghcr.io/torstenwerner/pagecourier:1.2.3
+helm show chart oci://ghcr.io/torstenwerner/charts/pagecourier --version 1.2.3
+docker pull ghcr.io/torstenwerner/pagecourier:1.2.3
+helm pull oci://ghcr.io/torstenwerner/charts/pagecourier --version 1.2.3
+```
+
+The workflow performs unauthenticated pulls and checks the chart/image
+correspondence for each publication. Operators must still verify the selected
+chart against their actual routing controller and API versions; GitHub Actions
+does not install infrastructure or perform routing verification.
 
 ## Kubernetes deployment with Helm
 
@@ -235,9 +300,9 @@ gateway, not in this chart. Configure proxy body limits to accept at least
 5 MiB plus multipart overhead (the chart's example uses 6 MiB) and redact
 document paths/IDs in proxy access logs.
 
-The chart metadata version and `appVersion` currently both match the repository
-image version `0.0.1`. Before chart publication is implemented, install from a
-checkout:
+The checked-in chart starts at version and image `0.0.1` for local development.
+CI creates a versioned package for each development run or release without
+changing the source chart; install from a checkout with:
 
 ```sh
 helm upgrade --install pagecourier ./charts/pagecourier \
@@ -245,13 +310,13 @@ helm upgrade --install pagecourier ./charts/pagecourier \
   --values charts/pagecourier/examples/none.yaml
 ```
 
-After the OCI chart package is published, use its version and an operator-owned
-values file instead:
+After an OCI release chart is published, use its exact version and an
+operator-owned values file instead (replace `1.2.3` with the release you chose):
 
 ```sh
 helm upgrade --install pagecourier \
   oci://ghcr.io/torstenwerner/charts/pagecourier \
-  --version 0.0.1 --namespace pagecourier --create-namespace \
+  --version 1.2.3 --namespace pagecourier --create-namespace \
   --values values-production.yaml
 ```
 

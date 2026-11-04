@@ -91,6 +91,7 @@ npm run test:unit         # Vitest unit tests
 npm run test:e2e:install  # Install Playwright Chromium once
 npm run test:e2e          # Node-adapter browser journeys with local test storage
 npm run test:acceptance   # Isolated production containers and real MinIO (Docker required)
+npm run helm:check        # Helm lint, package, four-mode render, and invalid-value checks
 npm test                  # Unit and browser tests
 npm run build             # Production build
 ```
@@ -213,6 +214,172 @@ of repeatedly restarting the app. Access the app by its configured canonical
 origin, not `localhost` when Compose specifies `127.0.0.1`. For custom production
 storage, use HTTPS and do not disable certificate verification. Keep provider
 debug/access logging out of captured acceptance artifacts.
+
+## Kubernetes deployment with Helm
+
+The chart installs only the PageCourier Deployment, a ClusterIP Service, and
+its service account (unless an existing account is selected). It never installs
+S3/MinIO, an ingress or mesh controller, Gateway API/Istio CRDs, certificates,
+or gateways. Configure an existing private S3-compatible bucket before
+installing; the configured identity needs `s3:GetObject` and `s3:PutObject` on
+the application prefix and `s3:ListBucket` on the bucket. Conditional
+create-only writes must be supported by the provider.
+
+The chart defaults to `exposure.mode: none`. The single mode setting selects
+exactly one optional route: standard Kubernetes Ingress, Gateway API HTTPRoute,
+or Istio VirtualService. Each route serves `/`; subpath hosting is unsupported.
+DNS, controller installation, HTTP-to-HTTPS redirects, TLS certificates and
+gateway listeners are operator-managed. Ingress TLS refers to an existing
+Secret; Gateway API and Istio TLS are configured on the existing listener or
+gateway, not in this chart. Configure proxy body limits to accept at least
+5 MiB plus multipart overhead (the chart's example uses 6 MiB) and redact
+document paths/IDs in proxy access logs.
+
+The chart metadata version and `appVersion` currently both match the repository
+image version `0.0.1`. Before chart publication is implemented, install from a
+checkout:
+
+```sh
+helm upgrade --install pagecourier ./charts/pagecourier \
+  --namespace pagecourier --create-namespace \
+  --values charts/pagecourier/examples/none.yaml
+```
+
+After the OCI chart package is published, use its version and an operator-owned
+values file instead:
+
+```sh
+helm upgrade --install pagecourier \
+  oci://ghcr.io/torstenwerner/charts/pagecourier \
+  --version 0.0.1 --namespace pagecourier --create-namespace \
+  --values values-production.yaml
+```
+
+Use the corresponding example as a starting point for each route:
+`charts/pagecourier/examples/none.yaml`, `ingress.yaml`, `gateway.yaml`, or
+`istio.yaml`. External credential examples are in
+`charts/pagecourier/examples/aws-workload-identity.yaml` and
+`external-secret.yaml`. The examples contain only placeholder public names,
+bucket names, and role identifiers; they contain no credentials. For an ingress, set `className`, host
+entries, optional annotations, and the name of an existing TLS Secret. For a
+Gateway API route, set `parentRefs` to an existing Gateway (including optional
+namespace/section name), hostnames, and optional method/header/query match
+constraints. The chart always adds a root `PathPrefix` match. For Istio, set the VirtualService hosts
+and references to existing Istio Gateways. Do not configure TLS certificates
+or gateway resources in PageCourier values.
+
+Set `app.publicOrigin`, `storage.bucket`, and `storage.region` for every
+deployment. The chart also supports a custom HTTPS S3 endpoint, path-style
+addressing, a key prefix, upload limits, log level, port, resource
+requests/limits, replica count, probes, pod/container security contexts,
+annotations, and image pull secrets. The defaults run as UID/GID 1000, drop
+all Linux capabilities, disallow privilege escalation, use a read-only root
+filesystem, and mount a size-limited writable `/tmp`. Keep at least one replica;
+multiple replicas share state exclusively through the configured bucket.
+Tune resource limits and probe timing for the target workload and storage
+latency. Readiness performs a bounded non-writing bucket check; liveness does
+not depend on S3.
+
+For AWS EKS IRSA, create the service account with the role annotation. The
+chart creates a service account by default:
+
+```yaml
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/pagecourier
+```
+
+For an existing service account, set `create: false` and its `name`. For
+non-AWS providers, reference an existing Kubernetes Secret; do not put
+credentials directly in a values file:
+
+```yaml
+extraEnv:
+  - name: AWS_ACCESS_KEY_ID
+    valueFrom:
+      secretKeyRef:
+        name: pagecourier-storage-credentials
+        key: access-key-id
+  - name: AWS_SECRET_ACCESS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: pagecourier-storage-credentials
+        key: secret-access-key
+```
+
+`extraEnvFrom` can also reference an existing Secret or ConfigMap. Store
+production values and secret references in an operator-managed file outside
+source control or inject them through a secret manager. `extraEnv` cannot
+override variables managed by the chart, including `NODE_ENV`, `PORT`, and the
+application/storage settings.
+
+To select an image by digest, set `image.digest` to a complete `sha256:` digest
+and leave `image.tag` empty. To select a tag, set `image.tag` and leave digest
+empty. The schema rejects malformed digests and simultaneous nonempty tag and
+digest values. `appVersion` is the default image tag when neither is overridden.
+
+Upgrade using the same chart version pin and values file, then inspect rollout
+and application readiness:
+
+```sh
+helm upgrade pagecourier ./charts/pagecourier \
+  --namespace pagecourier --values values-production.yaml
+kubectl rollout status deployment/pagecourier --namespace pagecourier
+kubectl get pods,service --namespace pagecourier
+helm history pagecourier --namespace pagecourier
+```
+
+Rollback to a reviewed revision with
+`helm rollback pagecourier <REVISION> --namespace pagecourier`. Helm rollback
+does not restore deleted S3 objects or replace the operator's backup plan.
+Retention is indefinite unless the bucket owner configures lifecycle expiration;
+do not expire PageCourier objects. Back up the bucket and its lifecycle, access,
+and encryption configuration independently of Helm release history.
+
+### Compatibility and verification
+
+| Component/API      | Chart target or local check                                                               | Verification status                                                               |
+| ------------------ | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Kubernetes         | Chart declares Kubernetes `>=1.26`; uses `apps/v1`, core `v1`, and `networking.k8s.io/v1` | Rendered locally; no Kubernetes API server installation was run                   |
+| Helm               | Chart API v2; local checks ran with Helm `v4.2.3`                                         | Lint, package, and template checks passed; Helm 3 compatibility was not exercised |
+| Gateway API        | `gateway.networking.k8s.io/v1` `HTTPRoute`                                                | Template rendered; CRD/controller installation and routing were not verified      |
+| Istio              | `networking.istio.io/v1` `VirtualService`                                                 | Template rendered; CRD/controller installation and routing were not verified      |
+| Ingress controller | Standard `networking.k8s.io/v1` Ingress                                                   | Template rendered; controller routing was not verified                            |
+
+These are manifest targets, not a claim of tested controller compatibility.
+Actual installations and end-to-end routing verification remain outstanding;
+rendering does not prove controller/API runtime compatibility. Before exposing
+the application, verify the installed controller supports the selected API
+version and test DNS, TLS, body-size handling, readiness, uploads and downloads.
+Run `npm run helm:check` to lint, package, render all four modes, assert that
+only the selected routing resource appears, and reject invalid exposure and
+image settings. This check is suitable for a later CI workflow; it does not
+deploy a Helm release.
+
+### Routing troubleshooting
+
+Start with `helm get values pagecourier --namespace pagecourier` and confirm
+that the release selected the intended exposure mode, hostname, and existing
+Gateway/Ingress/Istio references. Check the internal Service and ready
+endpoints before debugging the external controller:
+
+```sh
+kubectl get deployment,service,endpoints pagecourier --namespace pagecourier
+kubectl get pods --namespace pagecourier
+kubectl describe pod -l app.kubernetes.io/instance=pagecourier --namespace pagecourier
+```
+
+For Ingress, inspect `kubectl describe ingress pagecourier -n pagecourier` and
+the ingress controller's events/logs. For Gateway API, inspect the HTTPRoute
+and referenced Gateway and confirm `Accepted` and `ResolvedRefs` conditions
+(and listener/programmed status) are true. For Istio, inspect the
+VirtualService, referenced Gateway, and Istio ingress-gateway logs. A missing
+API kind usually means the selected mode's CRDs/controller are not installed;
+install and verify that infrastructure before enabling the mode. If routing
+works but requests fail, check DNS and TLS at the existing listener, proxy
+body-size limits, forwarded origin handling, and pod readiness. Do not copy
+full document URLs or IDs into shared logs or support reports.
 
 ## Document API
 

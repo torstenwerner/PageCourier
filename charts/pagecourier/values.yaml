@@ -1,0 +1,103 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/torstenwerner/pagecourier
+  tag: ''
+  digest: ''
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+nameOverride: ''
+fullnameOverride: ''
+
+serviceAccount:
+  create: true
+  name: ''
+  automountServiceAccountToken: false
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+
+app:
+  publicOrigin: ''
+  port: 3000
+  uploadMaxBytes: 5242880
+  logLevel: info
+
+storage:
+  bucket: ''
+  region: ''
+  endpoint: ''
+  forcePathStyle: false
+  keyPrefix: ''
+
+extraEnv: []
+extraEnvFrom: []
+
+service:
+  port: 3000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: '1'
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+terminationGracePeriodSeconds: 30
+tmpVolume:
+  sizeLimit: 64Mi
+
+exposure:
+  mode: none
+  ingress:
+    className: ''
+    annotations: {}
+    hosts:
+      - host: pagecourier.example.com
+    tls: []
+  gateway:
+    parentRefs: []
+    hostnames:
+      - pagecourier.example.com
+    matches: []
+  istio:
+    hosts:
+      - pagecourier.example.com
+    gateways: []

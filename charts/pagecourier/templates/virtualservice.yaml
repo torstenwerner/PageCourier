@@ -1,0 +1,28 @@
+{{- if eq .Values.exposure.mode "istio" }}
+{{- if empty .Values.exposure.istio.hosts }}
+{{- fail "exposure.istio.hosts must contain at least one host when exposure.mode is istio." }}
+{{- end }}
+{{- if empty .Values.exposure.istio.gateways }}
+{{- fail "exposure.istio.gateways must reference at least one existing Istio Gateway when exposure.mode is istio." }}
+{{- end }}
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ include "pagecourier.fullname" . }}
+  labels:
+    {{- include "pagecourier.labels" . | nindent 4 }}
+spec:
+  hosts:
+    {{- toYaml .Values.exposure.istio.hosts | nindent 4 }}
+  gateways:
+    {{- toYaml .Values.exposure.istio.gateways | nindent 4 }}
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: {{ include "pagecourier.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.service.port }}
+{{- end }}

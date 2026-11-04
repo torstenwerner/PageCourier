@@ -1,0 +1,15 @@
+apiVersion: v2
+name: pagecourier
+description: PageCourier application for Kubernetes with operator-managed S3-compatible storage
+type: application
+version: 0.0.1
+appVersion: '0.0.1'
+kubeVersion: '>=1.26.0-0'
+home: https://github.com/torstenwerner/PageCourier
+sources:
+  - https://github.com/torstenwerner/PageCourier
+maintainers:
+  - name: PageCourier maintainers
+    url: https://github.com/torstenwerner/PageCourier
+annotations:
+  artifacthub.io/license: MIT

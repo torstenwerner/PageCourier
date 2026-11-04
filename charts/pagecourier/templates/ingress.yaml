@@ -1,0 +1,36 @@
+{{- if eq .Values.exposure.mode "ingress" }}
+{{- if empty .Values.exposure.ingress.hosts }}
+{{- fail "exposure.ingress.hosts must contain at least one host when exposure.mode is ingress." }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pagecourier.fullname" . }}
+  labels:
+    {{- include "pagecourier.labels" . | nindent 4 }}
+  {{- with .Values.exposure.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.exposure.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.exposure.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.exposure.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "pagecourier.fullname" $ }}
+                port:
+                  name: http
+    {{- end }}
+{{- end }}

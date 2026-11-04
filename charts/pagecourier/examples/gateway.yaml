@@ -1,0 +1,16 @@
+app:
+  publicOrigin: https://pages.example.com
+storage:
+  bucket: pagecourier-production
+  region: us-east-1
+exposure:
+  mode: gateway
+  gateway:
+    parentRefs:
+      - name: public-gateway
+        namespace: gateway-system
+        sectionName: https
+    hostnames:
+      - pages.example.com
+    matches:
+      - method: GET

@@ -1,0 +1,110 @@
+{{- $reservedEnv := list "NODE_ENV" "HOST" "PORT" "PUBLIC_ORIGIN" "UPLOAD_MAX_BYTES" "LOG_LEVEL" "S3_BUCKET" "AWS_REGION" "S3_FORCE_PATH_STYLE" "S3_KEY_PREFIX" "S3_ENDPOINT" -}}
+{{- range .Values.extraEnv -}}
+{{- if has .name $reservedEnv -}}
+{{- fail (printf "extraEnv cannot override chart-managed environment variable %q." .name) -}}
+{{- end -}}
+{{- end -}}
+{{- range $key, $_ := .Values.podLabels -}}
+{{- if has $key (list "app.kubernetes.io/name" "app.kubernetes.io/instance") -}}
+{{- fail (printf "podLabels cannot override Deployment selector label %q." $key) -}}
+{{- end -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pagecourier.fullname" . }}
+  labels:
+    {{- include "pagecourier.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pagecourier.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "pagecourier.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pagecourier.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: pagecourier
+          {{- if .Values.image.digest }}
+          image: {{ printf "%s@%s" .Values.image.repository .Values.image.digest | quote }}
+          {{- else }}
+          image: {{ printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) | quote }}
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.app.port }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: {{ .Values.app.port | quote }}
+            - name: PUBLIC_ORIGIN
+              value: {{ required "app.publicOrigin must be set to the canonical public HTTP(S) origin." .Values.app.publicOrigin | quote }}
+            - name: UPLOAD_MAX_BYTES
+              value: {{ .Values.app.uploadMaxBytes | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.app.logLevel | quote }}
+            - name: S3_BUCKET
+              value: {{ required "storage.bucket must name an existing external S3-compatible bucket." .Values.storage.bucket | quote }}
+            - name: AWS_REGION
+              value: {{ required "storage.region must be set for the external S3-compatible bucket." .Values.storage.region | quote }}
+            - name: S3_FORCE_PATH_STYLE
+              value: {{ .Values.storage.forcePathStyle | quote }}
+            - name: S3_KEY_PREFIX
+              value: {{ .Values.storage.keyPrefix | quote }}
+            {{- with .Values.storage.endpoint }}
+            - name: S3_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            {{- with .Values.tmpVolume.sizeLimit }}
+            sizeLimit: {{ . }}
+            {{- end }}

@@ -1,0 +1,9 @@
+app:
+  publicOrigin: https://pages.example.com
+storage:
+  bucket: pagecourier-production
+  region: us-east-1
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/pagecourier

@@ -1,0 +1,45 @@
+{{- if eq .Values.exposure.mode "gateway" }}
+{{- if empty .Values.exposure.gateway.parentRefs }}
+{{- fail "exposure.gateway.parentRefs must reference an existing Gateway when exposure.mode is gateway." }}
+{{- end }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "pagecourier.fullname" . }}
+  labels:
+    {{- include "pagecourier.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.exposure.gateway.parentRefs | nindent 4 }}
+  {{- with .Values.exposure.gateway.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        {{- if .Values.exposure.gateway.matches }}
+        {{- range .Values.exposure.gateway.matches }}
+        - path:
+            type: PathPrefix
+            value: /
+          {{- with .headers }}
+          headers:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .method }}
+          method: {{ . }}
+          {{- end }}
+          {{- with .queryParams }}
+          queryParams:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+        {{- else }}
+        - path:
+            type: PathPrefix
+            value: /
+        {{- end }}
+      backendRefs:
+        - name: {{ include "pagecourier.fullname" . }}
+          port: {{ .Values.service.port }}
+{{- end }}

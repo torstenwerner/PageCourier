@@ -1,0 +1,17 @@
+app:
+  publicOrigin: https://pages.example.com
+storage:
+  bucket: pagecourier-production
+  region: us-east-1
+exposure:
+  mode: ingress
+  ingress:
+    className: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-body-size: 6m
+    hosts:
+      - host: pages.example.com
+    tls:
+      - hosts:
+          - pages.example.com
+        secretName: pages-example-com-tls

@@ -19,6 +19,7 @@
 		"test:e2e:install": "playwright install chromium",
 		"test:e2e": "playwright test",
 		"test:acceptance": "node scripts/acceptance.mjs",
+		"helm:check": "bash scripts/helm-check.sh",
 		"test": "npm run test:unit && npm run test:e2e"
 	},
 	"devDependencies": {

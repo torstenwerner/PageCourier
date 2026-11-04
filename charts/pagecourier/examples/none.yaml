@@ -1,0 +1,7 @@
+app:
+  publicOrigin: https://pages.example.com
+storage:
+  bucket: pagecourier-production
+  region: us-east-1
+exposure:
+  mode: none

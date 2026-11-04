@@ -22,7 +22,8 @@ export default defineConfig({
 					'default-src': ['self'],
 					'base-uri': ['self'],
 					'object-src': ['none'],
-					'frame-ancestors': ['none']
+					'frame-ancestors': ['none'],
+					'style-src': ['self']
 				}
 			}
 		})

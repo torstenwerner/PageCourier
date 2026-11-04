@@ -15,7 +15,7 @@ Small-team members need to turn one Markdown file into an immutable readable pag
 
 ## Content and constraints
 
-Keep the established PageCourier identity, headline, file-to-link illustration, and accessible GitHub project link. Show supported `.md` and `.markdown` formats, the effective size limit, and the warning that share links can be forwarded and secrets must not be uploaded. Preserve single-file upload, server validation, and redirect only after storage succeeds. Mermaid rendering is deferred.
+Keep the established PageCourier identity, headline, file-to-link illustration, and accessible GitHub project link. Show supported `.md` and `.markdown` formats, the effective size limit, and the warning that share links can be forwarded and secrets must not be uploaded. Preserve single-file upload, server validation, and redirect only after storage succeeds. The document reader supports bounded, strict Mermaid flowcharts with an accessible source fallback.
 
 ## Chosen direction and memorable moment
 
@@ -23,4 +23,4 @@ Use the mineral-green canvas, ink-navy text and diagram, signal-lime route marks
 
 ## Unresolved decisions
 
-The document reader uses the same identity and exposes copy, original download, and upload-another actions. Mermaid support remains a follow-up; raw HTML and unsupported relative resources are not rendered as application routes.
+The document reader uses the same identity and exposes copy, original download, and upload-another actions. Mermaid rendering is client-side, limited to documented flowchart syntax, and must preserve raw HTML and unsupported relative-resource protections.

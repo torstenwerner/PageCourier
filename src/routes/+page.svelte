@@ -18,7 +18,6 @@ FORM: Operate-mode extension of the established home surface; the upload is an a
 		name="description"
 		content="Turn a Markdown file into a readable page you can share with one unique link."
 	/>
-	<meta name="robots" content="noindex, nofollow" />
 	<meta name="referrer" content="no-referrer" />
 </svelte:head>
 

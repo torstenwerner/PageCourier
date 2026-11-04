@@ -29,7 +29,7 @@ the example file or client-side code.
 | `HOST`                | No         | `0.0.0.0`                 | Address on which the Node server listens.                                                                    |
 | `PORT`                | No         | `3000`                    | Listen port, from 1 through 65,535.                                                                          |
 | `UPLOAD_MAX_BYTES`    | No         | `5242880`                 | Positive, safe-integer upload limit in bytes (5 MiB by default).                                             |
-| `LOG_LEVEL`           | No         | `info`                    | One of `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.                                                |
+| `LOG_LEVEL`           | No         | `info`                    | Minimum structured application log level: `trace`, `debug`, `info`, `warn`, `error`, or `fatal`.             |
 | `S3_BUCKET`           | Production | `pagecourier-development` | S3-compatible bucket name.                                                                                   |
 | `AWS_REGION`          | Production | `us-east-1`               | AWS region for the bucket.                                                                                   |
 | `S3_ENDPOINT`         | No         | unset                     | Optional custom HTTP(S) endpoint; production endpoints must use HTTPS.                                       |
@@ -41,6 +41,23 @@ Production configuration is validated before the server starts. Set
 The AWS SDK uses its default credential-provider chain (for example workload
 identity or an injected credentials source); credentials are not application
 configuration and must never be committed.
+
+The application exposes `GET /health/live` and `GET /health/ready`. Liveness
+only confirms that the process can serve requests and stays healthy during S3
+outages. Readiness performs a bounded, non-writing `HeadBucket` request and
+returns 503 when the configured storage is unavailable or inaccessible. Probe
+both endpoints independently; do not use readiness as the process liveness
+check. Readiness requires the bucket-level `s3:ListBucket` permission in
+addition to object access.
+
+Application logs are newline-delimited JSON with a timestamp, level,
+operation, classification, and (for requests) the route template, method, and
+status. Request paths, document IDs, share URLs, uploaded content, credentials,
+and raw storage-provider errors are not logged. Set `LOG_LEVEL` to control the
+minimum level. The Node adapter handles SIGINT/SIGTERM by stopping new
+connections, draining in-flight requests, and closing idle connections within
+its bounded shutdown period; the application closes the S3 client after the
+adapter's shutdown event.
 
 ## Development
 
@@ -101,9 +118,13 @@ the exact original bytes, including UTF-8 BOM and original line endings, with
 safe attachment filenames. Malformed, missing and operator-deleted IDs return
 404; permissions and storage outages are not treated as missing objects.
 
-Document/download responses use private, no-store caching, no indexing and
-no-referrer headers. Anyone with a document URL can retrieve its content; do
-not upload secrets. There are no application edit/delete or listing endpoints.
+Pages include `noindex, nofollow` metadata and responses include non-indexing,
+no-referrer, MIME-sniffing, and frame-protection headers. Document/download
+responses and document errors use private, no-store caching. The content
+security policy allows only same-origin application resources and HTTPS remote
+images; raw HTML remains disabled and sanitized. Anyone with a document URL
+can retrieve its content; do not upload secrets. There are no application
+edit/delete or listing endpoints.
 
 ### Markdown rendering and sharing
 
@@ -190,7 +211,8 @@ Provision a private bucket before starting the app. The application requires
 `s3:GetObject` and `s3:PutObject` on the configured object prefix, not object
 deletion. AWS additionally requires `s3:ListBucket` on the bucket to distinguish
 an absent key as 404: without it, AWS may return AccessDenied for missing keys,
-which the app correctly reports as an operational 503. Listing is not exposed
+which the app correctly reports as an operational 503. Readiness uses
+`HeadBucket`, which also requires bucket-level access. Listing is not exposed
 by the application. Operators may enforce conditional writes using bucket
 policies in addition to application checks; verify compatible providers support
 the conditional PUT contract. The app does not require public bucket access.
@@ -206,7 +228,13 @@ objects. Operators own storage capacity, backups/restoration and direct object
 deletion. Delete the document's single object using operator credentials to
 make its URL return 404; no cache or application-local state retains it.
 Restoring an object restores its URL. Replicas need only shared storage and the
-same canonical origin.
+same canonical origin. Keep credentials outside the repository and use
+workload identity or an external secret provider. Terminate HTTPS at a trusted
+ingress, validate forwarded host/protocol headers there, and configure ingress
+and proxy access/error logs to omit document URL path segments and query
+strings (or redact document IDs) just as the application does. Monitor
+readiness failures and safe operational error classifications; do not enable
+provider debug logging that records request URLs, headers, or object keys.
 
 ### MinIO integration tests
 

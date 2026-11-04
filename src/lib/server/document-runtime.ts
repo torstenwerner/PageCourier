@@ -15,6 +15,11 @@ export const documentHeaders = {
 	'x-content-type-options': 'nosniff'
 };
 
+export const healthHeaders = {
+	'cache-control': 'no-store',
+	'content-type': 'application/json; charset=utf-8'
+};
+
 export function failureResponse(cause: unknown): Response {
 	if (!(cause instanceof DocumentFailure)) throw cause;
 	return Response.json(

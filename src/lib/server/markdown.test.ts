@@ -57,6 +57,17 @@ describe('renderMarkdown', () => {
 		expect(html).not.toContain('<script>');
 	});
 
+	it('keeps Mermaid fences as escaped source for accessible browser rendering', () => {
+		const { html } = renderMarkdown(
+			'```mermaid\nflowchart TD\nA[Start] --> B[Finish]\n```\n',
+			'notes.md'
+		);
+
+		expect(html).toContain('class="language-mermaid"');
+		expect(html).toContain('A[Start] --> B[Finish]');
+		expect(html).not.toContain('<svg');
+	});
+
 	it('disables raw HTML and removes unsafe and relative resource URLs', () => {
 		const { html } = renderMarkdown(
 			[

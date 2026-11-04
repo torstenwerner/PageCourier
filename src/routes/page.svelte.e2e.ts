@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { mermaidLimits } from '../lib/mermaid/limits';
 
 async function upload(
 	page: import('@playwright/test').Page,
@@ -223,4 +224,128 @@ test('wraps a long fallback title without horizontal overflow on mobile', async 
 			() => document.documentElement.scrollWidth <= document.documentElement.clientWidth
 		)
 	).toBe(true);
+});
+
+test('renders bounded Mermaid flowcharts with accessible errors and unchanged document actions', async ({
+	page,
+	context
+}) => {
+	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+	await page.addInitScript(() => {
+		(window as Window & { mermaidPayloadExecuted?: boolean }).mermaidPayloadExecuted = false;
+	});
+	await page.goto('/');
+
+	const manyNodes = Array.from({ length: 41 }, (_, index) => `N${index} --> N${index + 1}`).join(
+		'\n'
+	);
+	const source = [
+		'# Mermaid rendering',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		'Start[Start] --> Decision{Ready?}',
+		'Decision --> Finish[Done]',
+		'```',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		'A -->',
+		'```',
+		'',
+		'```mermaid',
+		'sequenceDiagram',
+		'Alice->>Bob: Hello',
+		'```',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		`A["<img src=x onerror="window.mermaidPayloadExecuted=true">"]`,
+		'```',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		'A["<script>window.mermaidPayloadExecuted=true</script>"]',
+		'```',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		'A --> B',
+		'click A "javascript:alert(1)"',
+		'```',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		manyNodes,
+		'```',
+		'',
+		'```mermaid',
+		'flowchart TD',
+		`A[${'x'.repeat(mermaidLimits.maxSourceBytes)}]`,
+		'```',
+		''
+	].join('\n');
+
+	const documentUrl = await upload(page, 'start-upload', 'diagrams.md', source);
+	const documentResponse = await page.reload();
+	const csp = documentResponse?.headers()['content-security-policy'];
+	if (!csp) throw new Error('Document response is missing a Content-Security-Policy header.');
+	expect(csp).toContain("style-src 'self' 'nonce-");
+	expect(csp).not.toContain('unsafe-inline');
+	const styleNonce = csp.match(/style-src[^;]*'nonce-([^']+)'/)?.[1];
+	expect(styleNonce).toBeTruthy();
+	await expect(page.getByRole('heading', { name: 'Mermaid rendering' })).toBeVisible();
+	await expect(page.locator('.mermaid-output svg')).toHaveCount(1);
+	await expect(page.getByRole('img', { name: 'Rendered Mermaid flowchart' })).toBeVisible();
+	const diagramBounds = await page.locator('.mermaid-output svg').evaluate((svg) => {
+		const { width, height } = svg.getBoundingClientRect();
+		return { width, height, graphicElements: svg.querySelectorAll('path, rect, text').length };
+	});
+	expect(diagramBounds.width).toBeGreaterThan(0);
+	expect(diagramBounds.height).toBeGreaterThan(0);
+	expect(diagramBounds.graphicElements).toBeGreaterThan(0);
+	expect(
+		await page
+			.locator('.mermaid-output svg style')
+			.evaluate((style) => (style as HTMLStyleElement).nonce)
+	).toBe(styleNonce);
+	expect(
+		await page.locator('.mermaid-output svg[style], .mermaid-output svg [style]').count()
+	).toBe(0);
+	await expect(page.locator('.mermaid-status[role="alert"]')).toHaveCount(7);
+	await expect(page.locator('.mermaid-source').nth(1)).toHaveAttribute('open', '');
+	expect(
+		await page.evaluate(
+			() => (window as Window & { mermaidPayloadExecuted?: boolean }).mermaidPayloadExecuted
+		)
+	).toBe(false);
+	expect(await page.locator('.mermaid-output a').count()).toBe(0);
+	expect(await page.locator('.mermaid-output script, .mermaid-output foreignObject').count()).toBe(
+		0
+	);
+
+	await page.getByRole('button', { name: 'Copy link' }).click();
+	await expect(page.locator('.copy-feedback [role="status"]')).toContainText(
+		'Link copied to clipboard.'
+	);
+	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(documentUrl);
+
+	const download = await page.request.get(`${documentUrl}/download`);
+	expect(download.status()).toBe(200);
+	expect(Buffer.from(await download.body())).toEqual(Buffer.from(source));
+});
+
+test('keeps diagrams after the per-document rendering cap as source', async ({ page }) => {
+	await page.goto('/');
+	const source = Array.from(
+		{ length: mermaidLimits.maxDiagrams + 1 },
+		(_, index) => `\`\`\`mermaid\nflowchart TD\nN${index}[Step ${index}]\n\`\`\``
+	).join('\n\n');
+
+	await upload(page, 'start-upload', 'many-diagrams.md', source);
+	await expect(page.locator('.mermaid-diagram')).toHaveCount(mermaidLimits.maxDiagrams);
+	await expect(page.locator('.mermaid-status[role="alert"]')).toHaveCount(1);
+	await expect(page.locator('.mermaid-source pre')).toHaveCount(mermaidLimits.maxDiagrams);
+	await expect(page.locator('article > pre > code.language-mermaid')).toHaveCount(1);
+	await expect(page.locator('article > pre > code.language-mermaid')).toContainText('N20');
 });

@@ -117,8 +117,33 @@ External links support HTTP and HTTPS. Remote images load directly from their
 HTTPS hosts; those hosts can observe the reader's network request and IP
 address. Relative file links, local image paths, attachments, and bundled
 assets are unsupported and are not routed through PageCourier. Mathematical
-notation is not rendered as math. Mermaid diagrams are deferred to a follow-up
-implementation and currently render as ordinary fenced code.
+notation is not rendered as math.
+
+Fenced Mermaid blocks render in the browser only when they use the supported
+flowchart subset: `flowchart` with `TB`, `TD`, `BT`, `LR`, or `RL` direction,
+node identifiers up to 16 ASCII letters/digits/underscores, labels, and
+Mermaid's basic flowchart edges. Sequence diagrams, comments, directives,
+custom styling, links, click actions, HTML, and other Mermaid syntax remain
+available as source but are not rendered. Raw source remains available in an
+expandable, accessible fallback; malformed diagrams show an inline error and
+do not disable document actions.
+
+Mermaid work is bounded before parsing/rendering: each diagram is limited to
+4,096 UTF-8 bytes, 64 lines, 40 unique node identifiers, 60 edges, and 120
+Unicode characters per label. A document renders at most 20 diagrams with at
+most 16,384 UTF-8 bytes of Mermaid source in total. Mermaid is configured with
+strict security, HTML labels disabled, and matching text/edge limits. The
+supported syntax excludes interactive and embedded-style features; generated
+SVG is checked against an SVG element/attribute allowlist before insertion.
+Rendering is presentation-only and never rewrites the stored Markdown or
+downloaded bytes.
+
+Mermaid's generated SVG includes a stylesheet. The document response mirrors
+SvelteKit's per-response script nonce into `style-src`, and the reader applies
+that nonce to the generated SVG stylesheet. Mermaid's inline style attributes
+are removed before the SVG enters the document. Runtime CSP hardening must
+preserve this nonce relationship or move Mermaid styles to an allowed
+stylesheet; do not add `unsafe-inline`.
 
 Document URLs are share links, not access controls. Anyone who receives or is
 forwarded a link can read and download the immutable document. Documents remain

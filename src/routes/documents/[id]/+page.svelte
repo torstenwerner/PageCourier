@@ -3,6 +3,7 @@
 	import { tick } from 'svelte';
 	import StatusMessage from '../../../lib/components/StatusMessage.svelte';
 	import UploadForm from '../../../lib/components/UploadForm.svelte';
+	import { renderMermaidDiagrams } from '../../../lib/mermaid/render';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -105,7 +106,11 @@
 				</div>
 			{/if}
 
-			<article class="markdown-body" aria-label={`Shared document: ${data.title}`}>
+			<article
+				class="markdown-body"
+				aria-label={`Shared document: ${data.title}`}
+				use:renderMermaidDiagrams
+			>
 				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 				{@html data.html}
 			</article>
@@ -358,6 +363,48 @@
 
 	.markdown-body :global(pre code) {
 		font-size: inherit;
+	}
+
+	.markdown-body :global(.mermaid-diagram) {
+		margin: 1.5rem 0;
+		padding: 1rem;
+		border: 1px solid var(--line);
+		background: var(--surface-muted);
+	}
+
+	.markdown-body :global(.mermaid-output) {
+		max-width: 100%;
+		overflow-x: auto;
+	}
+
+	.markdown-body :global(.mermaid-output svg) {
+		display: block;
+		width: 100%;
+		max-width: 100%;
+		height: auto;
+		margin-inline: auto;
+	}
+
+	.markdown-body :global(.mermaid-status) {
+		margin: 0.75rem 0 0;
+		color: var(--muted-ink);
+		font-size: 0.875rem;
+	}
+
+	.markdown-body :global(.mermaid-source) {
+		margin-top: 0.75rem;
+	}
+
+	.markdown-body :global(.mermaid-source summary) {
+		width: fit-content;
+		color: var(--blue);
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.markdown-body :global(.mermaid-source summary:focus-visible) {
+		outline: 3px solid var(--blue);
+		outline-offset: 3px;
 	}
 
 	.markdown-body :global(:not(pre) > code) {

@@ -5,6 +5,17 @@ chart_dir="charts/pagecourier"
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+assert_upload_limit() {
+  local rendered="$1"
+  local expected="$2"
+  local actual
+  actual="$(awk '$1 == "-" && $2 == "name:" && $3 == "UPLOAD_MAX_BYTES" { getline; print $2; exit }' "$rendered")"
+  if [[ "$actual" != "\"$expected\"" ]]; then
+    printf 'Expected UPLOAD_MAX_BYTES "%s", got %s\n' "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
 helm lint "$chart_dir" --values "$chart_dir/examples/none.yaml"
 chart_version="$(helm show chart "$chart_dir" | awk '$1 == "version:" { print $2 }')"
 chart_app_version="$(helm show chart "$chart_dir" | awk '$1 == "appVersion:" { print $2 }')"
@@ -31,6 +42,7 @@ for mode in none ingress gateway istio; do
   grep -q 'runAsNonRoot: true' "$rendered"
   grep -q 'path: /health/live' "$rendered"
   grep -q 'path: /health/ready' "$rendered"
+  assert_upload_limit "$rendered" 5242880
 
   case "$mode" in
     none) expected_kind="" ;;
@@ -47,6 +59,27 @@ for mode in none ingress gateway istio; do
       exit 1
     fi
   done
+done
+
+printf 'app:\n  uploadMaxBytes: 10485760\n' >"$tmp_dir/custom-limit-values.yaml"
+helm template pagecourier "$chart_dir" \
+  --values "$chart_dir/examples/none.yaml" \
+  --values "$tmp_dir/custom-limit-values.yaml" >"$tmp_dir/custom-limit.yaml"
+assert_upload_limit "$tmp_dir/custom-limit.yaml" 10485760
+
+printf 'app:\n  uploadMaxBytes: 9007199254675455\n' >"$tmp_dir/max-limit-values.yaml"
+helm template pagecourier "$chart_dir" \
+  --values "$chart_dir/examples/none.yaml" \
+  --values "$tmp_dir/max-limit-values.yaml" >"$tmp_dir/max-limit.yaml"
+assert_upload_limit "$tmp_dir/max-limit.yaml" 9007199254675455
+
+for invalid_limit in 0 1.5 9007199254675456; do
+  if helm template pagecourier "$chart_dir" --values "$chart_dir/examples/none.yaml" \
+    --set "app.uploadMaxBytes=$invalid_limit" >"$tmp_dir/invalid-limit.log" 2>&1; then
+    printf 'Invalid upload limit %s was accepted\n' "$invalid_limit" >&2
+    exit 1
+  fi
+  grep -q 'uploadMaxBytes' "$tmp_dir/invalid-limit.log"
 done
 
 if helm template pagecourier "$chart_dir" --values "$chart_dir/examples/none.yaml" \

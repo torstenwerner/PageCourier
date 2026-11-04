@@ -67,7 +67,7 @@ spec:
             - name: PUBLIC_ORIGIN
               value: {{ required "app.publicOrigin must be set to the canonical public HTTP(S) origin." .Values.app.publicOrigin | quote }}
             - name: UPLOAD_MAX_BYTES
-              value: {{ .Values.app.uploadMaxBytes | quote }}
+              value: {{ .Values.app.uploadMaxBytes | int64 | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.app.logLevel | quote }}
             - name: S3_BUCKET

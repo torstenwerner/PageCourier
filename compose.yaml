@@ -1,0 +1,99 @@
+name: pagecourier
+
+services:
+  minio:
+    image: pagecourier-minio:local
+    build:
+      context: .
+      dockerfile: containers/minio.Dockerfile
+      target: server
+    command: ['server', '/data']
+    environment:
+      MINIO_ROOT_USER: local-development-admin
+      MINIO_ROOT_PASSWORD: local-development-admin-password
+      MINIO_BROWSER: 'off'
+    ports:
+      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
+    volumes:
+      - minio-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:9000/minio/health/ready']
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  provision:
+    image: pagecourier-mc:local
+    build:
+      context: .
+      dockerfile: containers/minio.Dockerfile
+      target: client
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '/provision.sh']
+    volumes:
+      - ./containers/provision.sh:/provision.sh:ro
+      - ./containers/app-policy.json:/app-policy.json:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  app: &app
+    image: ${PAGECOURIER_IMAGE:-pagecourier:local}
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-development}
+        REVISION: ${REVISION:-unknown}
+    depends_on:
+      provision:
+        condition: service_completed_successfully
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://127.0.0.1:${APP_PORT:-3000}}
+      HOST: 0.0.0.0
+      PORT: '3000'
+      S3_BUCKET: pagecourier-development
+      AWS_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_ALLOW_LOCAL_HTTP: 'true'
+      S3_FORCE_PATH_STYLE: 'true'
+      AWS_ACCESS_KEY_ID: local-development-app
+      AWS_SECRET_ACCESS_KEY: local-development-app-password
+      UPLOAD_MAX_BYTES: '5242880'
+      SHUTDOWN_TIMEOUT: '10'
+    ports:
+      - '127.0.0.1:${APP_PORT:-3000}:3000'
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  replica:
+    <<: *app
+    profiles: [acceptance]
+    ports:
+      - '127.0.0.1:${REPLICA_PORT:-3001}:3000'
+
+volumes:
+  minio-data:

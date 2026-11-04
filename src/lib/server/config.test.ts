@@ -75,4 +75,28 @@ describe('parseConfig', () => {
 			})
 		).toThrow('S3_ENDPOINT must use HTTPS in production.');
 	});
+
+	it('allows explicitly opted-in local HTTP only with a loopback canonical origin', () => {
+		const env = {
+			NODE_ENV: 'production',
+			PUBLIC_ORIGIN: 'http://127.0.0.1:3000',
+			S3_BUCKET: 'pagecourier-development',
+			AWS_REGION: 'us-east-1',
+			S3_ENDPOINT: 'http://minio:9000',
+			S3_ALLOW_LOCAL_HTTP: 'true'
+		};
+		expect(parseConfig(env).storage.endpoint).toBe(env.S3_ENDPOINT);
+		expect(() => parseConfig({ ...env, S3_ALLOW_LOCAL_HTTP: 'yes' })).toThrow(
+			'S3_ALLOW_LOCAL_HTTP'
+		);
+		expect(() => parseConfig({ ...env, PUBLIC_ORIGIN: 'https://pages.example.com' })).toThrow(
+			'requires a loopback PUBLIC_ORIGIN'
+		);
+		expect(() => parseConfig({ ...env, S3_ENDPOINT: 'http://storage.example.com' })).toThrow(
+			'must use HTTPS in production'
+		);
+		expect(() => parseConfig({ ...env, S3_ALLOW_LOCAL_HTTP: 'false' })).toThrow(
+			'must use HTTPS in production'
+		);
+	});
 });

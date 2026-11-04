@@ -1,10 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = 'http://127.0.0.1:4173';
+const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4173';
 
 export default defineConfig({
-	testDir: './src/routes',
-	testMatch: '**/*.e2e.ts',
+	testDir: '.',
+	testMatch: ['src/routes/**/*.e2e.ts', 'tests/**/*.e2e.ts'],
+	workers: process.env.E2E_COMPOSE_PROJECT ? 1 : undefined,
+	timeout: process.env.E2E_COMPOSE_PROJECT ? 120_000 : 30_000,
 	reporter: 'list',
 	use: {
 		baseURL,
@@ -16,14 +18,16 @@ export default defineConfig({
 			use: { ...devices['Desktop Chrome'] }
 		}
 	],
-	webServer: {
-		command: 'npm run build && node scripts/e2e-server.mjs',
-		url: baseURL,
-		timeout: 120_000,
-		reuseExistingServer: !process.env.CI,
-		env: {
-			PORT: '4173',
-			PUBLIC_ORIGIN: baseURL
-		}
-	}
+	webServer: process.env.E2E_BASE_URL
+		? undefined
+		: {
+				command: 'npm run build && node scripts/e2e-server.mjs',
+				url: baseURL,
+				timeout: 120_000,
+				reuseExistingServer: !process.env.CI,
+				env: {
+					PORT: '4173',
+					PUBLIC_ORIGIN: baseURL
+				}
+			}
 });

@@ -33,6 +33,10 @@ export const variables = defineEnvVars({
 		description: 'Optional custom S3-compatible endpoint.',
 		schema: (value) => value
 	},
+	S3_ALLOW_LOCAL_HTTP: {
+		description: 'Explicit local-only HTTP storage opt-in for Compose acceptance.',
+		schema: (value) => value
+	},
 	S3_FORCE_PATH_STYLE: {
 		description: 'Use path-style S3 addressing when true.',
 		schema: (value) => value

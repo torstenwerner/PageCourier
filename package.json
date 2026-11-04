@@ -18,6 +18,7 @@
 		"test:watch": "vitest",
 		"test:e2e:install": "playwright install chromium",
 		"test:e2e": "playwright test",
+		"test:acceptance": "node scripts/acceptance.mjs",
 		"test": "npm run test:unit && npm run test:e2e"
 	},
 	"devDependencies": {

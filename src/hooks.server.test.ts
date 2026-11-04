@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { close } = vi.hoisted(() => ({ close: vi.fn() }));
-vi.mock('./lib/server/runtime-config', () => ({
+const { close, appConfig } = vi.hoisted(() => ({
+	close: vi.fn(),
 	appConfig: { publicOrigin: 'https://pages.example.com' }
+}));
+vi.mock('./lib/server/runtime-config', () => ({
+	appConfig
 }));
 vi.mock('./lib/server/document-runtime', () => ({
 	documentHeaders: {
@@ -29,12 +32,68 @@ function event(url: string, method = 'GET', origin?: string) {
 }
 
 beforeEach(() => {
+	appConfig.publicOrigin = 'https://pages.example.com';
 	vi.clearAllMocks();
 	vi.spyOn(console, 'info').mockImplementation(() => {});
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 describe('runtime request hardening', () => {
+	it.each([
+		['GET', 'http://localhost', '/?source=local'],
+		['GET', 'https://localhost', '/?source=local'],
+		['HEAD', 'http://[::1]', `/documents/${id}?source=local`]
+	])(
+		'redirects local %s page visits from %s before displaying upload forms',
+		async (method, host, path) => {
+			appConfig.publicOrigin = 'http://127.0.0.1:3000';
+			const resolve = vi.fn(async () => new Response('unexpected'));
+			const response = await handle({
+				event: event(`${host}:3000${path}`, method),
+				resolve
+			} as Parameters<typeof handle>[0]);
+
+			expect(response.status).toBe(307);
+			expect(response.headers.get('location')).toBe(`${appConfig.publicOrigin}${path}`);
+			expect(response.headers.get('cache-control')).toBe('private, no-store');
+			expect(resolve).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([
+		'http://127.0.0.1:3000/',
+		'https://127.0.0.1:3000/',
+		'http://localhost:3001/',
+		'http://attacker.example:3000/',
+		'http://localhost:3000/health/ready',
+		`http://localhost:3000/documents/${id}/download`
+	])('does not canonicalize unrelated reads or API requests: %s', async (url) => {
+		appConfig.publicOrigin = 'http://127.0.0.1:3000';
+		const resolve = vi.fn(async () => new Response('unchanged'));
+		const response = await handle({
+			event: event(url),
+			resolve
+		} as Parameters<typeof handle>[0]);
+		expect(response.status).toBe(200);
+		expect(response.headers.get('location')).toBeNull();
+		expect(resolve).toHaveBeenCalledOnce();
+	});
+
+	it.each([undefined, 'null', 'http://localhost:3000', 'http://evil.example:3000'])(
+		'still rejects local writes with a non-canonical origin: %s',
+		async (origin) => {
+			appConfig.publicOrigin = 'http://127.0.0.1:3000';
+			const resolve = vi.fn(async () => new Response('unexpected'));
+			const response = await handle({
+				event: event('http://localhost:3000/', 'POST', origin),
+				resolve
+			} as Parameters<typeof handle>[0]);
+			expect(response.status).toBe(403);
+			expect(response.headers.get('location')).toBeNull();
+			expect(resolve).not.toHaveBeenCalled();
+		}
+	);
+
 	it('adds private document and browser security headers while retaining the CSP nonce', async () => {
 		const log = vi.spyOn(console, 'info');
 		const response = await handle({

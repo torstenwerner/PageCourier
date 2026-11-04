@@ -37,6 +37,26 @@ function allowNonceStyles(response: Response): void {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+	const canonical = new URL(appConfig.publicOrigin);
+	const loopbackHosts = ['localhost', '127.0.0.1', '[::1]'];
+	// adapter-node can infer HTTPS for direct local HTTP, so compare hostnames and ports.
+	if (
+		['GET', 'HEAD'].includes(event.request.method) &&
+		(event.url.pathname === '/' || /^\/documents\/[a-f0-9]{32}$/.test(event.url.pathname)) &&
+		event.url.hostname !== canonical.hostname &&
+		loopbackHosts.includes(event.url.hostname) &&
+		loopbackHosts.includes(canonical.hostname) &&
+		event.url.port === canonical.port
+	) {
+		return new Response(null, {
+			status: 307,
+			headers: {
+				location: `${canonical.origin}${event.url.pathname}${event.url.search}`,
+				...headersForOrigin(event.url.origin),
+				...documentHeaders
+			}
+		});
+	}
 	if (
 		!['GET', 'HEAD', 'OPTIONS'].includes(event.request.method) &&
 		event.request.headers.get('origin') !== appConfig.publicOrigin

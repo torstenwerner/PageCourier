@@ -28,6 +28,11 @@ const htmlPattern = /<\s*\/?\s*[a-z!]/i;
 const forbiddenFeaturePattern =
 	/(^|[^\w])(?:click|href|callback|subgraph|end|style|class|classDef|linkStyle|accTitle|accDescr|init)(?=\s|$|:|@)/i;
 const supportedFirstLinePattern = /^flowchart\s+(?:TB|TD|BT|LR|RL)\s*;?$/i;
+const sequenceFirstLinePattern = /^sequenceDiagram$/;
+const sequenceParticipantPattern =
+	/^(?:participant|actor)\s+([A-Za-z0-9_]{1,16})(?:\s+as\s+(.+))?$/;
+const sequenceMessagePattern =
+	/^([A-Za-z0-9_]{1,16})\s*(-->>|->>|-->|->)\s*([A-Za-z0-9_]{1,16})\s*:\s*(.+)$/;
 
 function utf8Size(value: string): number {
 	return new TextEncoder().encode(value).byteLength;
@@ -35,6 +40,40 @@ function utf8Size(value: string): number {
 
 function failure(reason: MermaidLimitFailure): MermaidValidation {
 	return { supported: false, reason };
+}
+
+function validateSequence(lines: string[]): MermaidValidation {
+	const participants = new Set<string>();
+	let messages = 0;
+	for (const line of lines) {
+		const statement = line.trim();
+		if (!statement) continue;
+		if (statement.includes(';')) return failure('unsupported-feature');
+
+		const participant = statement.match(sequenceParticipantPattern);
+		const message = statement.match(sequenceMessagePattern);
+		if (participant) {
+			participants.add(participant[1]);
+			if (
+				participant[2] &&
+				Array.from(participant[2].trim()).length > mermaidLimits.maxLabelCharacters
+			) {
+				return failure('label-size');
+			}
+		} else if (message) {
+			participants.add(message[1]);
+			participants.add(message[3]);
+			messages++;
+			if (Array.from(message[4].trim()).length > mermaidLimits.maxLabelCharacters) {
+				return failure('label-size');
+			}
+		} else {
+			return failure('unsupported-feature');
+		}
+		if (participants.size > mermaidLimits.maxNodes) return failure('node-count');
+		if (messages > mermaidLimits.maxEdges) return failure('edge-count');
+	}
+	return { supported: true };
 }
 
 export function validateMermaidSource(source: string): MermaidValidation {
@@ -45,12 +84,17 @@ export function validateMermaidSource(source: string): MermaidValidation {
 	if (lines.length > mermaidLimits.maxLines) return failure('line-count');
 
 	const firstLineIndex = lines.findIndex((line) => line.trim().length > 0);
-	if (firstLineIndex < 0 || !supportedFirstLinePattern.test(lines[firstLineIndex].trim())) {
+	const firstLine = firstLineIndex < 0 ? '' : lines[firstLineIndex].trim();
+	if (!supportedFirstLinePattern.test(firstLine) && !sequenceFirstLinePattern.test(firstLine)) {
 		return failure('diagram-type');
 	}
 
 	if (htmlPattern.test(source) || source.includes('%%') || source.includes('@{')) {
 		return failure('unsupported-feature');
+	}
+
+	if (sequenceFirstLinePattern.test(firstLine)) {
+		return validateSequence(lines.slice(firstLineIndex + 1));
 	}
 
 	const sourceWithoutLabels = source.replace(labelPattern, ' ');

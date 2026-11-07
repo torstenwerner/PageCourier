@@ -51,7 +51,7 @@ describe('validateMermaidSource', () => {
 	});
 
 	it('rejects unsupported diagram types and interactive or HTML features', () => {
-		expect(validateMermaidSource('sequenceDiagram\nAlice->>Bob: Hello')).toEqual({
+		expect(validateMermaidSource('gantt\ntitle Project')).toEqual({
 			supported: false,
 			reason: 'diagram-type'
 		});
@@ -66,6 +66,110 @@ describe('validateMermaidSource', () => {
 		expect(validateMermaidSource('flowchart TD\nA@{ href: "https://example.com" }')).toEqual({
 			supported: false,
 			reason: 'unsupported-feature'
+		});
+	});
+
+	it('accepts bounded sequence participants, actors, and basic messages', () => {
+		const source = [
+			'sequenceDiagram',
+			'    participant Foo as Foo',
+			'    participant Bar as Bar',
+			'',
+			'    Foo->>Bar: Hello Bar, how are you?',
+			'    Bar-->>Foo: I am good thanks!'
+		].join('\n');
+		expect(validateMermaidSource(source)).toEqual({ supported: true });
+		expect(
+			validateMermaidSource(
+				'sequenceDiagram\nactor Alice as Reader\nparticipant Bob\nAlice->Bob: One\nBob-->Alice: Two\nAlice->>Bob: Three\nBob-->>Alice: Four'
+			)
+		).toEqual({ supported: true });
+		expect(validateMermaidSource('sequenceDiagram\nAlice->>Bob: implicit participants')).toEqual({
+			supported: true
+		});
+	});
+
+	it('rejects unsupported sequence syntax and embedded content', () => {
+		for (const statement of [
+			'Note over Alice: hello',
+			'activate Alice',
+			'loop repeat',
+			'Alice-xBob: message',
+			'participant Alice as <script>alert(1)</script>',
+			'Alice->>Bob: <img src=x onerror=alert(1)>',
+			'%%{init: {"securityLevel":"loose"}}%%',
+			'link Alice: https://example.com',
+			'Alice->>Bob: hello; link Alice: https://example.com',
+			'participant IdentifierLongerThan16'
+		]) {
+			expect(validateMermaidSource(`sequenceDiagram\n${statement}`)).toEqual({
+				supported: false,
+				reason: 'unsupported-feature'
+			});
+		}
+	});
+
+	it('enforces inclusive sequence participant, message, and label limits', () => {
+		const participants = Array.from(
+			{ length: mermaidLimits.maxNodes },
+			(_, i) => `participant P${i}`
+		);
+		expect(validateMermaidSource(['sequenceDiagram', ...participants].join('\n'))).toEqual({
+			supported: true
+		});
+		expect(
+			validateMermaidSource(['sequenceDiagram', ...participants, 'P0->>P40: extra'].join('\n'))
+		).toEqual({
+			supported: false,
+			reason: 'node-count'
+		});
+
+		const messages = Array(mermaidLimits.maxEdges).fill('A->>B: hello');
+		expect(validateMermaidSource(['sequenceDiagram', ...messages].join('\n'))).toEqual({
+			supported: true
+		});
+		expect(
+			validateMermaidSource(['sequenceDiagram', ...messages, 'B-->>A: extra'].join('\n'))
+		).toEqual({
+			supported: false,
+			reason: 'edge-count'
+		});
+
+		for (const statement of ['participant A as ', 'A->>B: ']) {
+			expect(
+				validateMermaidSource(
+					`sequenceDiagram\n${statement}${'😀'.repeat(mermaidLimits.maxLabelCharacters)}`
+				)
+			).toEqual({
+				supported: true
+			});
+			expect(
+				validateMermaidSource(
+					`sequenceDiagram\n${statement}${'😀'.repeat(mermaidLimits.maxLabelCharacters + 1)}`
+				)
+			).toEqual({
+				supported: false,
+				reason: 'label-size'
+			});
+		}
+
+		const sequenceAtByteLimit = 'sequenceDiagram\nA->>B: hello'.padEnd(
+			mermaidLimits.maxSourceBytes,
+			' '
+		);
+		expect(validateMermaidSource(sequenceAtByteLimit)).toEqual({ supported: true });
+		expect(validateMermaidSource(`${sequenceAtByteLimit} `)).toEqual({
+			supported: false,
+			reason: 'source-size'
+		});
+		const sequenceAtLineLimit = [
+			'sequenceDiagram',
+			...Array(mermaidLimits.maxLines - 1).fill('participant A')
+		];
+		expect(validateMermaidSource(sequenceAtLineLimit.join('\n'))).toEqual({ supported: true });
+		expect(validateMermaidSource([...sequenceAtLineLimit, 'participant A'].join('\n'))).toEqual({
+			supported: false,
+			reason: 'line-count'
 		});
 	});
 
@@ -132,5 +236,18 @@ describe('validateMermaidDocument', () => {
 			supported: false,
 			reason: 'document-source-size'
 		});
+		const sequenceAtByteLimit = 'sequenceDiagram\nA->>B: hello'.padEnd(
+			mermaidLimits.maxSourceBytes,
+			' '
+		);
+		expect(
+			validateMermaidDocument([
+				sourceAtByteLimit,
+				sequenceAtByteLimit,
+				sourceAtByteLimit,
+				sequenceAtByteLimit,
+				'sequenceDiagram\nA->>B: hello'
+			]).at(-1)
+		).toEqual({ supported: false, reason: 'document-source-size' });
 	});
 });

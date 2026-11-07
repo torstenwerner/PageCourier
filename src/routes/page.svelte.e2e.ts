@@ -262,7 +262,7 @@ test('wraps a long fallback title without horizontal overflow on mobile', async 
 	).toBe(true);
 });
 
-test('renders bounded Mermaid flowcharts with accessible errors and unchanged document actions', async ({
+test('renders bounded Mermaid diagrams with accessible errors and unchanged document actions', async ({
 	page,
 	context
 }) => {
@@ -296,6 +296,25 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 		'Decision --> Finish[Done]',
 		'```',
 		'',
+		'```mermaid',
+		'sequenceDiagram',
+		'    participant Foo as Foo',
+		'    participant Bar as Bar',
+		'',
+		'    Foo->>Bar: Hello Bar, how are you?',
+		'    Bar-->>Foo: I am good thanks!',
+		'```',
+		'',
+		'```mermaid',
+		'sequenceDiagram',
+		'actor Alice as Reader',
+		'participant Bob as Service',
+		'Alice->Bob: Request',
+		'Bob-->Alice: Response',
+		'Bob->>Charlie: Forward',
+		'Charlie-->>Bob: Acknowledged',
+		'```',
+		'',
 		'![Remote image](https://images.example.test/photo.png)',
 		'',
 		'![Insecure image](http://images.example.test/photo.png)',
@@ -307,7 +326,7 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 		'',
 		'```mermaid',
 		'sequenceDiagram',
-		'Alice->>Bob: Hello',
+		'Note over Alice: Unsupported',
 		'```',
 		'',
 		'```mermaid',
@@ -318,6 +337,11 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 		'```mermaid',
 		'flowchart TD',
 		'A["<script>window.mermaidPayloadExecuted=true</script>"]',
+		'```',
+		'',
+		'```mermaid',
+		'sequenceDiagram',
+		'Alice->>Bob: <img src=x onerror="window.mermaidPayloadExecuted=true">',
 		'```',
 		'',
 		'```mermaid',
@@ -361,25 +385,36 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 	expect(imageRequests.length).toBeGreaterThan(0);
 	expect(imageRequests.every((url) => url === 'https://images.example.test/photo.png')).toBe(true);
 	await expect(page.locator('.markdown-body img[src^="http://"]')).toHaveCount(0);
-	await expect(page.locator('.mermaid-output svg')).toHaveCount(1);
+	await expect(page.locator('.mermaid-output svg')).toHaveCount(3);
 	await expect(page.getByRole('img', { name: 'Rendered Mermaid flowchart' })).toBeVisible();
-	const diagramBounds = await page.locator('.mermaid-output svg').evaluate((svg) => {
-		const { width, height } = svg.getBoundingClientRect();
-		return { width, height, graphicElements: svg.querySelectorAll('path, rect, text').length };
-	});
-	expect(diagramBounds.width).toBeGreaterThan(0);
-	expect(diagramBounds.height).toBeGreaterThan(0);
-	expect(diagramBounds.graphicElements).toBeGreaterThan(0);
-	expect(
-		await page
-			.locator('.mermaid-output svg style')
-			.evaluate((style) => (style as HTMLStyleElement).nonce)
-	).toBe(styleNonce);
+	const sequence = page.getByRole('img', { name: 'Rendered Mermaid sequence diagram' }).first();
+	await expect(sequence).toBeVisible();
+	await expect(sequence).toContainText('Hello Bar, how are you?');
+	await expect(sequence).toContainText('I am good thanks!');
+	const actorSequence = page.getByRole('img', { name: 'Rendered Mermaid sequence diagram' }).nth(1);
+	await expect(actorSequence).toContainText('Reader');
+	await expect(actorSequence).toContainText('Response');
+	for (const svg of await page.locator('.mermaid-output svg').all()) {
+		const diagramBounds = await svg.evaluate((element) => {
+			const { width, height } = element.getBoundingClientRect();
+			return {
+				width,
+				height,
+				graphicElements: element.querySelectorAll('path, rect, text').length
+			};
+		});
+		expect(diagramBounds.width).toBeGreaterThan(0);
+		expect(diagramBounds.height).toBeGreaterThan(0);
+		expect(diagramBounds.graphicElements).toBeGreaterThan(0);
+		expect(await svg.locator('style').evaluate((style) => (style as HTMLStyleElement).nonce)).toBe(
+			styleNonce
+		);
+	}
 	expect(
 		await page.locator('.mermaid-output svg[style], .mermaid-output svg [style]').count()
 	).toBe(0);
-	await expect(page.locator('.mermaid-status[role="alert"]')).toHaveCount(7);
-	await expect(page.locator('.mermaid-source').nth(1)).toHaveAttribute('open', '');
+	await expect(page.locator('.mermaid-status[role="alert"]')).toHaveCount(8);
+	await expect(page.locator('.mermaid-source').nth(3)).toHaveAttribute('open', '');
 	expect(
 		await page.evaluate(
 			() => (window as Window & { mermaidPayloadExecuted?: boolean }).mermaidPayloadExecuted
@@ -403,9 +438,10 @@ test('renders bounded Mermaid flowcharts with accessible errors and unchanged do
 
 test('keeps diagrams after the per-document rendering cap as source', async ({ page }) => {
 	await page.goto('/');
-	const source = Array.from(
-		{ length: mermaidLimits.maxDiagrams + 1 },
-		(_, index) => `\`\`\`mermaid\nflowchart TD\nN${index}[Step ${index}]\n\`\`\``
+	const source = Array.from({ length: mermaidLimits.maxDiagrams + 1 }, (_, index) =>
+		index % 2 === 0
+			? `\`\`\`mermaid\nflowchart TD\nN${index}[Step ${index}]\n\`\`\``
+			: `\`\`\`mermaid\nsequenceDiagram\nA->>B: Step ${index}\n\`\`\``
 	).join('\n\n');
 
 	await upload(page, 'start-upload', 'many-diagrams.md', source);

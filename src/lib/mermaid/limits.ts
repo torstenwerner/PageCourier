@@ -33,6 +33,8 @@ const sequenceParticipantPattern =
 	/^(?:participant|actor)\s+([A-Za-z0-9_]{1,16})(?:\s+as\s+(.+))?$/;
 const sequenceMessagePattern =
 	/^([A-Za-z0-9_]{1,16})\s*(-->>|->>|-->|->)\s*([A-Za-z0-9_]{1,16})\s*:\s*(.+)$/;
+const sequenceNotePattern =
+	/^note\s+(?:(?:left|right)\s+of\s+([A-Za-z0-9_]{1,16})|over\s+([A-Za-z0-9_]{1,16})(?:\s*,\s*([A-Za-z0-9_]{1,16}))?)\s*:\s*(.+)$/i;
 
 function utf8Size(value: string): number {
 	return new TextEncoder().encode(value).byteLength;
@@ -52,6 +54,7 @@ function validateSequence(lines: string[]): MermaidValidation {
 
 		const participant = statement.match(sequenceParticipantPattern);
 		const message = statement.match(sequenceMessagePattern);
+		const note = statement.match(sequenceNotePattern);
 		if (participant) {
 			participants.add(participant[1]);
 			if (
@@ -65,6 +68,14 @@ function validateSequence(lines: string[]): MermaidValidation {
 			participants.add(message[3]);
 			messages++;
 			if (Array.from(message[4].trim()).length > mermaidLimits.maxLabelCharacters) {
+				return failure('label-size');
+			}
+		} else if (note) {
+			for (const identifier of note.slice(1, 4)) {
+				if (identifier) participants.add(identifier);
+			}
+			messages++;
+			if (Array.from(note[4].trim()).length > mermaidLimits.maxLabelCharacters) {
 				return failure('label-size');
 			}
 		} else {

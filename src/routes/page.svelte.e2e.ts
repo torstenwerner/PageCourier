@@ -302,6 +302,9 @@ test('renders bounded Mermaid diagrams with accessible errors and unchanged docu
 		'    participant Bar as Bar',
 		'',
 		'    Foo->>Bar: Hello Bar, how are you?',
+		"    Note over Foo,Bar: Message now belongs to the reader's inbox!",
+		'    Note left of Foo: Before response',
+		'    Note right of Bar: After request',
 		'    Bar-->>Foo: I am good thanks!',
 		'```',
 		'',
@@ -326,7 +329,7 @@ test('renders bounded Mermaid diagrams with accessible errors and unchanged docu
 		'',
 		'```mermaid',
 		'sequenceDiagram',
-		'Note over Alice: Unsupported',
+		'activate Alice',
 		'```',
 		'',
 		'```mermaid',
@@ -341,7 +344,7 @@ test('renders bounded Mermaid diagrams with accessible errors and unchanged docu
 		'',
 		'```mermaid',
 		'sequenceDiagram',
-		'Alice->>Bob: <img src=x onerror="window.mermaidPayloadExecuted=true">',
+		'Note over Alice: <img src=x onerror="window.mermaidPayloadExecuted=true">',
 		'```',
 		'',
 		'```mermaid',
@@ -391,6 +394,9 @@ test('renders bounded Mermaid diagrams with accessible errors and unchanged docu
 	await expect(sequence).toBeVisible();
 	await expect(sequence).toContainText('Hello Bar, how are you?');
 	await expect(sequence).toContainText('I am good thanks!');
+	await expect(sequence).toContainText("Message now belongs to the reader's inbox!");
+	await expect(sequence).toContainText('Before response');
+	await expect(sequence).toContainText('After request');
 	const actorSequence = page.getByRole('img', { name: 'Rendered Mermaid sequence diagram' }).nth(1);
 	await expect(actorSequence).toContainText('Reader');
 	await expect(actorSequence).toContainText('Response');

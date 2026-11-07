@@ -497,11 +497,13 @@ subsets:
   node identifiers, labels, and Mermaid's basic flowchart edges.
 - Sequence diagrams: `sequenceDiagram`, `participant` or `actor` declarations
   with optional `as` display names, and labeled messages using `->`, `-->`,
-  `->>`, or `-->>`. Participants can also be introduced by messages. Sequence
-  statements and labels cannot contain semicolons.
+  `->>`, or `-->>`, plus plain-text `Note left of`, `Note right of`, and
+  `Note over` statements (over one or two participants). Participants can also
+  be introduced by messages or notes. Sequence statements and labels cannot
+  contain semicolons.
 
 Identifiers are limited to 16 ASCII letters, digits, or underscores. Comments,
-directives, custom styling, links, click actions, HTML, sequence notes,
+directives, custom styling, links, click actions, HTML,
 activation, grouping, and other Mermaid syntax remain available as source but
 are not rendered. Raw source remains available in an expandable, accessible
 fallback; malformed diagrams show an inline error and do not disable document
@@ -509,8 +511,8 @@ actions.
 
 Mermaid work is bounded before parsing/rendering: each diagram is limited to
 4,096 UTF-8 bytes, 64 lines, 40 unique node or participant identifiers, 60
-edges or messages, and 120 Unicode characters per label, display name, or
-message. A document renders at most 20 diagrams with at
+edges or combined messages and notes, and 120 Unicode characters per label,
+display name, message, or note. A document renders at most 20 diagrams with at
 most 16,384 UTF-8 bytes of Mermaid source in total. Mermaid is configured with
 strict security, HTML labels disabled, and matching text/edge limits. The
 supported syntax excludes interactive and embedded-style features; generated

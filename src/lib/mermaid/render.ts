@@ -194,7 +194,7 @@ function messageForFailure(reason: MermaidLimitFailure): string {
 		case 'node-count':
 			return `Diagram exceeds the ${mermaidLimits.maxNodes}-node limit.`;
 		case 'edge-count':
-			return `Diagram exceeds the ${mermaidLimits.maxEdges}-edge limit.`;
+			return `Diagram exceeds the ${mermaidLimits.maxEdges}-edge/message/note limit.`;
 		case 'label-size':
 			return `A diagram label exceeds ${mermaidLimits.maxLabelCharacters} characters.`;
 		case 'document-diagram-count':

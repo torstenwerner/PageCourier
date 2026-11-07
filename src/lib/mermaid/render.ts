@@ -26,28 +26,35 @@ const allowedElements = new Set([
 	'clipPath',
 	'title',
 	'desc',
-	'style'
+	'style',
+	'symbol'
 ]);
 const allowedAttributes = new Set([
+	'alignment-baseline',
 	'aria-label',
 	'aria-labelledby',
 	'aria-roledescription',
 	'class',
 	'clip-path',
+	'clip-rule',
 	'cx',
 	'cy',
 	'd',
 	'data-edge',
 	'data-et',
+	'data-from',
 	'data-id',
 	'data-points',
 	'data-look',
+	'data-to',
+	'data-type',
 	'dominant-baseline',
 	'dx',
 	'dy',
 	'fill',
 	'fill-opacity',
 	'fill-rule',
+	'filter',
 	'flood-color',
 	'flood-opacity',
 	'font-family',
@@ -62,6 +69,7 @@ const allowedAttributes = new Set([
 	'markerWidth',
 	'markerHeight',
 	'markerUnits',
+	'name',
 	'offset',
 	'opacity',
 	'orient',
@@ -127,7 +135,7 @@ function validateCss(value: string): void {
 	}
 }
 
-function sanitizeSvg(svg: string): SVGSVGElement {
+function sanitizeSvg(svg: string, diagramType: 'flowchart' | 'sequence diagram'): SVGSVGElement {
 	if (svg.length > 131_072) throw new Error('The rendered diagram is too large.');
 	const document = new DOMParser().parseFromString(svg, 'image/svg+xml');
 	const root = document.documentElement;
@@ -162,7 +170,7 @@ function sanitizeSvg(svg: string): SVGSVGElement {
 		result.append(window.document.importNode(child, true));
 	}
 	result.setAttribute('role', 'img');
-	result.setAttribute('aria-label', 'Rendered Mermaid flowchart');
+	result.setAttribute('aria-label', `Rendered Mermaid ${diagramType}`);
 	result.setAttribute('focusable', 'false');
 
 	const nonce = window.document.querySelector<HTMLScriptElement>('script[nonce]')?.nonce;
@@ -180,9 +188,9 @@ function messageForFailure(reason: MermaidLimitFailure): string {
 		case 'line-count':
 			return `Diagram source exceeds ${mermaidLimits.maxLines} lines.`;
 		case 'diagram-type':
-			return 'Only Mermaid flowcharts with a supported direction are rendered.';
+			return 'Only supported Mermaid flowcharts and sequence diagrams are rendered.';
 		case 'unsupported-feature':
-			return 'This flowchart uses Mermaid syntax outside the supported subset.';
+			return 'This diagram uses Mermaid syntax outside the supported subset.';
 		case 'node-count':
 			return `Diagram exceeds the ${mermaidLimits.maxNodes}-node limit.`;
 		case 'edge-count':
@@ -197,6 +205,14 @@ function messageForFailure(reason: MermaidLimitFailure): string {
 }
 
 function createFigure(pre: HTMLPreElement, source: string) {
+	const diagramType = /^sequenceDiagram$/.test(
+		source
+			.trimStart()
+			.split(/\r\n|\r|\n/, 1)[0]
+			.trim()
+	)
+		? 'sequence diagram'
+		: 'flowchart';
 	const figure = window.document.createElement('figure');
 	figure.className = 'mermaid-diagram';
 
@@ -206,7 +222,7 @@ function createFigure(pre: HTMLPreElement, source: string) {
 	const status = window.document.createElement('p');
 	status.className = 'mermaid-status';
 	status.setAttribute('role', 'status');
-	status.textContent = 'Rendering Mermaid flowchart…';
+	status.textContent = `Rendering Mermaid ${diagramType}…`;
 
 	const details = window.document.createElement('details');
 	details.className = 'mermaid-source';
@@ -217,7 +233,7 @@ function createFigure(pre: HTMLPreElement, source: string) {
 	figure.append(output, status, details);
 	pre.replaceWith(figure);
 	details.append(pre);
-	return { figure, output, status, details, source };
+	return { figure, output, status, details, source, diagramType } as const;
 }
 
 function showFailure(
@@ -285,10 +301,10 @@ async function renderDiagrams(root: HTMLElement, isDestroyed: () => boolean): Pr
 		try {
 			const { svg } = await mermaid.render(`pagecourier-${crypto.randomUUID()}`, item.source);
 			if (isDestroyed()) return;
-			item.output.replaceChildren(sanitizeSvg(svg));
+			item.output.replaceChildren(sanitizeSvg(svg, item.diagramType));
 			item.status.textContent = 'Diagram rendered. Source is available below.';
 		} catch {
-			showFailure(item, 'This Mermaid flowchart could not be rendered.');
+			showFailure(item, 'This Mermaid diagram could not be rendered.');
 		}
 		await yieldToBrowser();
 	}

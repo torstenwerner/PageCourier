@@ -91,7 +91,12 @@ describe('validateMermaidSource', () => {
 
 	it('rejects unsupported sequence syntax and embedded content', () => {
 		for (const statement of [
-			'Note over Alice: hello',
+			'Note over Alice,Bob,Charlie: hello',
+			'Note left of Alice,Bob: hello',
+			'Note over Alice:',
+			'Note over IdentifierLongerThan16: hello',
+			'Note over Alice: <img src=x onerror=alert(1)>',
+			'Note over Alice: hello; link Alice: https://example.com',
 			'activate Alice',
 			'loop repeat',
 			'Alice-xBob: message',
@@ -107,6 +112,63 @@ describe('validateMermaidSource', () => {
 				reason: 'unsupported-feature'
 			});
 		}
+	});
+
+	it('accepts plain-text sequence notes in all supported positions', () => {
+		for (const position of ['over Alice', 'over Alice, Bob', 'left of Alice', 'right of Bob']) {
+			expect(
+				validateMermaidSource(
+					`sequenceDiagram\nparticipant Alice\nparticipant Bob\nAlice->>Bob: Request\nNote ${position}: Message now belongs to the reader's inbox!`
+				)
+			).toEqual({ supported: true });
+		}
+		expect(validateMermaidSource('sequenceDiagram\nnote over Alice,Bob: hello')).toEqual({
+			supported: true
+		});
+	});
+
+	it('bounds note text, participant references, and combined messages and notes', () => {
+		for (const statement of ['Note over A: ', 'Note over A,B: ', 'Note left of A: ']) {
+			expect(
+				validateMermaidSource(
+					`sequenceDiagram\n${statement}${'😀'.repeat(mermaidLimits.maxLabelCharacters)}`
+				)
+			).toEqual({ supported: true });
+			expect(
+				validateMermaidSource(
+					`sequenceDiagram\n${statement}${'😀'.repeat(mermaidLimits.maxLabelCharacters + 1)}`
+				)
+			).toEqual({ supported: false, reason: 'label-size' });
+		}
+		const notes = Array.from(
+			{ length: mermaidLimits.maxNodes },
+			(_, index) => `Note over P${index}: hello`
+		);
+		expect(validateMermaidSource(['sequenceDiagram', ...notes].join('\n'))).toEqual({
+			supported: true
+		});
+		expect(
+			validateMermaidSource(['sequenceDiagram', ...notes, 'Note over P0,P40: extra'].join('\n'))
+		).toEqual({ supported: false, reason: 'node-count' });
+
+		const messages = Array(mermaidLimits.maxEdges - 1).fill('A->>B: hello');
+		expect(
+			validateMermaidSource(['sequenceDiagram', ...messages, 'Note over A,B: hello'].join('\n'))
+		).toEqual({ supported: true });
+		expect(
+			validateMermaidSource(
+				['sequenceDiagram', ...messages, 'Note over A,B: hello', 'Note right of B: extra'].join(
+					'\n'
+				)
+			)
+		).toEqual({ supported: false, reason: 'edge-count' });
+		expect(
+			validateMermaidSource(
+				['sequenceDiagram', ...Array(mermaidLimits.maxEdges + 1).fill('Note over A: hello')].join(
+					'\n'
+				)
+			)
+		).toEqual({ supported: false, reason: 'edge-count' });
 	});
 
 	it('enforces inclusive sequence participant, message, and label limits', () => {

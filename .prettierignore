@@ -5,6 +5,9 @@ yarn.lock
 bun.lock
 bun.lockb
 
+# Generated metadata
+/skills-lock.json
+
 # Miscellaneous
 /static/
 /charts/pagecourier/templates/

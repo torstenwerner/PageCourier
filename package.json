@@ -12,7 +12,7 @@
 		"start": "node scripts/start.mjs",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"lint": "prettier --check . && eslint .",
+		"lint": "git ls-files -z | xargs -0 prettier --check --ignore-unknown -- && eslint .",
 		"format": "prettier --write .",
 		"test:unit": "vitest run",
 		"test:watch": "vitest",
